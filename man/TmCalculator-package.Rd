@@ -12,8 +12,8 @@ The melting temperature of nucleic acid sequences can be calculated in three met
 \tabular{ll}{
 Package: \tab TmCalculator\cr
 Type: \tab Package\cr
-Version: \tab 1.0.0\cr
-Date: \tab 2019-01-25\cr
+Version: \tab 1.0.1\cr
+Date: \tab 2020-07-30\cr
 License: \tab GPL (>= 2)\cr
 }
 }

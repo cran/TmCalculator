@@ -1,10 +1,13 @@
 salt_correction <-
 function(Na=0, K=0, Tris=0, Mg=0, dNTPs=0, method=1, ntseq=NULL,ambiguous=FALSE){
   if (method %in% c(5,6,7) && is.null(ntseq)==TRUE){
-    stop("sequence is is needed to calculate GC content or sequence length when method is 5,6,7")
+    stop("sequence is needed to calculate GC content and sequence length when method is 5,6,7")
   }
   if(method > 7){
-    stop("Allowed method is 1-7")
+    stop("allowed method is 1-7")
+  }
+  if(Na < 0 | K < 0 | Tris < 0 | Mg < 0 | dNTPs < 0){
+    stop("all parameters 'Na','K','Tris','Mg','dNTP' should not be less than 0")
   }
   if (is.null(ntseq)==FALSE){
     corr = 0
@@ -29,7 +32,7 @@ function(Na=0, K=0, Tris=0, Mg=0, dNTPs=0, method=1, ntseq=NULL,ambiguous=FALSE)
       }
       mon <- Mon/1e+3
       if (method %in% c(1:7) && mon == 0){
-        stop("Total ion concentration of zero is not allowed in this method.")
+        stop("total ion concentration of zero is not allowed in this method")
       }
       if (method == 1){
         corr <- 16.6*log10(mon)
@@ -45,7 +48,7 @@ function(Na=0, K=0, Tris=0, Mg=0, dNTPs=0, method=1, ntseq=NULL,ambiguous=FALSE)
         corr <- (4.29*ptGC/100-3.95)*1e-5*log(mon)+9.40e-6*log(mon) ^ 2
       }else if(method == 7){
         m7 <- c(3.92, -0.911, 6.26, 1.42, -48.2, 52.5, 8.31)
-        dntps <- if (dNTPs > 0) dNTPs*1e-3
+        dntps <- dNTPs*1e-3
         ka = 3e4
         mg <- (sqrt((ka*dntps-ka*mg+1)**2+4*ka*mg)-(ka*dntps-ka*mg+1))/(2*ka)
         R <- if (Mon > 0) sqrt(mg)/mon

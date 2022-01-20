@@ -1,5 +1,24 @@
-GC <-
-function (ntseq, ambiguous = FALSE, totalnt = FALSE){
+#' Calculate G and C content of nucleotide sequences
+#' 
+#' Calculate G and C content of nucleotide sequences. The number of G and C in sequence is divided by length of sequence(when totalnt is TRUE) or the number of all A,T,C,G and ambiguous base.
+#' 
+#' @param ntseq Sequence (5' to 3') of one strand of the nucleic acid duplex as string or vector of characters.
+#' 
+#' @param ambiguous Ambiguous bases are taken into account to compute the G and C content when ambiguous is TRUE.
+#' 
+#' @param totalnt Sum of 'G' and 'C' bases divided by the length of the sequence when totalnt is TRUE.
+#' 
+#' @returns Content of G and C(range from 0 to 100%)
+#' 
+#' @examples 
+#' 
+#' GC(c("a","t","c","t","g","g","g","c","c","a","g","t","a"))#53.84615
+#' GC("GCATSWSYK",ambiguous = TRUE)#55.55556
+#' 
+#' @author Junhui Li
+#' 
+#' @export GC
+GC <- function (ntseq, ambiguous = FALSE, totalnt = TRUE){
   if (length(ntseq) == 1 && is.na(ntseq)){
     return(NA)
   }
@@ -15,7 +34,7 @@ function (ntseq, ambiguous = FALSE, totalnt = FALSE){
   }
   nSeq <- length(vecSeq)
   if(!all(vecSeq %in% c("A","B","C","D","G","H","I","K","M","N","R","S","T","V","W","Y"))){
-    warning("None Nucleic Acid Base in input Sequence")
+    warning("None Nucleic Acid Base are found in input Sequence")
   }
   nc <- sum(vecSeq %in% "C")
   ng <- sum(vecSeq %in% "G")
@@ -71,7 +90,7 @@ function (ntseq, ambiguous = FALSE, totalnt = FALSE){
     }
   }
   if(totalnt){
-    cat("argument totalnt is deprecated\n")
+    #cat("argument totalnt is deprecated\n")
     ptGC <- 100*(ngc)/nSeq
     return(ptGC)
   }else{

@@ -1,8 +1,178 @@
-Tm_NN <-
-function(ntseq,ambiguous=FALSE,comSeq=NULL,shift=0,nn_table="DNA_NN4",tmm_table="DNA_TMM1",
-                  imm_table="DNA_IMM1", de_table="DNA_DE1",dnac1=25, dnac2=25, selfcomp=FALSE, Na=50,
-                  K=0, Tris=0, Mg=0, dNTPs=0, saltcorr=5){
-  
+#' Calculate melting temperature using nearest neighbor thermodynamics
+#' 
+#' Calculate melting temperature using nearest neighbor thermodynamics
+#' 
+#' @param ntseq Sequence (5' to 3') of one strand of the nucleic acid duplex
+#'   as string or vector of characters.
+#' 
+#' @param ambiguous Ambiguous bases are taken into account to compute the G
+#'  and C content when ambiguous is TRUE.Default is FALSE.
+#' 
+#' @param comSeq Complementary sequence. The sequence of the template/target in 3'->5' direction
+#' 
+#' @param shift Shift of the primer/probe sequence on the template/target sequence, default=0. 
+#' for example: when shift=0, the first nucleotide base at 5` end of primer align to first one at 3` 
+#' end of template. When shift=-1, the second nucleotide base at 5` end of primer align to first one at 3` 
+#' end of template.
+#' 
+#' When shift=1, the first nucleotide base at 5` end of primer align to second one at 3` end 
+#' of template. The shift parameter is necessary to align  primer/probe and template/target 
+#' if they have different lengths or if they should have dangling ends.
+#' 
+#' @param nn_table Thermodynamic NN values, eight tables are implemented.
+#' 
+#' For DNA/DNA hybridizations:
+#'   DNA_NN1,DNA_NN2,DNA_NN3,DNA_NN4
+#' 
+#' For RNA/RNA hybridizations:
+#'   RNA_NN1,RNA_NN2,RNA_NN3
+#' 
+#' For RNA/DNA hybridizations:
+#'   R_DNA_NN1
+#' 
+#' @param tmm_table Thermodynamic values for terminal mismatches. Default: DNA_TMM1
+#' 
+#' @param imm_table Thermodynamic values for internal mismatches, may include insosine mismatches. Default: DNA_IMM1
+#' 
+#' @param de_table Thermodynamic values for dangling ends. DNA_DE1(default) and RNA_DE1
+#' 
+#' @param dnac1 Concentration of the higher concentrated strand [nM]. Typically this will
+#'  be the primer (for PCR) or the probe. Default=25.
+#' 
+#' @param dnac2 Concentration of the lower concentrated strand [nM].
+#' 
+#' @param selfcomp Sequence self-complementary, default=False. If 'True' 
+#' the primer is thought binding to itself, thus dnac2 is not considered.
+#' 
+#' @param Na Millimolar concentration of Na, default is 0
+#' 
+#' @param K Millimolar concentration of K, default is 0
+#' 
+#' @param Tris Millimolar concentration of Tris, default is 0
+#' 
+#' @param Mg Millimolar concentration of Mg, default is 0
+#' 
+#' @param dNTPs Millimolar concentration of dNTPs, default is 0
+#' 
+#' @param saltcorr Salt correction method should be chosen when provide 'userset' 
+#' Options are "Schildkraut2010", "Wetmur1991","SantaLucia1996","SantaLucia1998-1",
+#' "SantaLucia1998-2","Owczarzy2004","Owczarzy2008". Note that NA means no salt correction. 
+#' 
+#' @param DMSO Percent DMSO
+#' 
+#' @param fmd Formamide concentration in percentage (fmdmethod="concentration") or molar (fmdmethod="molar").
+#' 
+#' @param DMSOfactor Coeffecient of Tm decreases per percent DMSO. Default=0.75 von Ahsen N (2001) <PMID:11673362>. Other published values are 0.5, 0.6 and 0.675.
+#' 
+#' @param fmdfactor Coeffecient of Tm decrease per percent formamide. Default=0.65. Several papers report factors between 0.6 and 0.72.
+#' 
+#' @param fmdmethod "concentration" method for formamide concentration in percentage and "molar" for formamide concentration in molar.
+#' 
+#' @details 
+#' 
+#'  DNA_NN1: Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>
+#'  
+#'  DNA_NN2: Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>
+#'  
+#'  DNA_NN3: Allawi H (1998) <doi:10.1093/nar/26.11.2694>
+#'  
+#'  DNA_NN4: SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>
+#'  
+#'  RNA_NN1: Freier S (1986) <doi:10.1073/pnas.83.24.9373>
+#'  
+#'  RNA_NN2: Xia T (1998) <doi:10.1021/bi9809425>
+#'  
+#'  RNA_NN3: Chen JL (2012) <doi:10.1021/bi3002709>
+#'  
+#'  R_DNA_NN1: Sugimoto N (1995)<doi:10.1016/S0048-9697(98)00088-6>
+#'  
+#'  DNA_TMM1: Bommarito S (2000)  <doi:10.1093/nar/28.9.1929>
+#'  
+#'  DNA_IMM1: Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>
+#'  
+#'  DNA_DE1: Bommarito S (2000) <doi:10.1093/nar/28.9.1929>
+#'  
+#'  RNA_DE1: Turner D H (2010) <doi:10.1093/nar/gkp892>
+#' 
+#' @references 
+#' 
+#' Breslauer K J , Frank R , Blocker H , et al. Predicting DNA duplex stability from the base sequence.[J]. Proceedings of the National Academy of Sciences, 1986, 83(11):3746-3750.
+#' 
+#' Sugimoto N , Nakano S , Yoneyama M , et al. Improved Thermodynamic Parameters and Helix Initiation Factor to Predict Stability of DNA Duplexes[J]. Nucleic Acids Research, 1996, 24(22):4501-5.
+#' 
+#' Allawi, H. Thermodynamics of internal C.T mismatches in DNA[J]. Nucleic Acids Research, 1998, 26(11):2694-2701.
+#' 
+#' Hicks L D , Santalucia J . The thermodynamics of DNA structural motifs.[J]. Annual Review of Biophysics & Biomolecular Structure, 2004, 33(1):415-440.
+#' 
+#' Freier S M , Kierzek R , Jaeger J A , et al. Improved free-energy parameters for predictions of RNA duplex stability.[J]. Proceedings of the National Academy of Sciences, 1986, 83(24):9373-9377.
+#' 
+#' Xia T , Santalucia , J , Burkard M E , et al. Thermodynamic Parameters for an Expanded Nearest-Neighbor Model for Formation of RNA Duplexes with Watson-Crick Base Pairs,[J]. Biochemistry, 1998, 37(42):14719-14735.
+#' 
+#' Chen J L , Dishler A L , Kennedy S D , et al. Testing the Nearest Neighbor Model for Canonical RNA Base Pairs: Revision of GU Parameters[J]. Biochemistry, 2012, 51(16):3508-3522.
+#' 
+#' Bommarito S, Peyret N, Jr S L. Thermodynamic parameters for DNA sequences with dangling ends[J]. Nucleic Acids Research, 2000, 28(9):1929-1934.
+#' 
+#' Turner D H , Mathews D H . NNDB: the nearest neighbor parameter database for predicting stability of nucleic acid secondary structure[J]. Nucleic Acids Research, 2010, 38(Database issue):D280-D282.
+#' 
+#' Sugimoto N , Nakano S I , Katoh M , et al. Thermodynamic Parameters To Predict Stability of RNA/DNA Hybrid Duplexes[J]. Biochemistry, 1995, 34(35):11211-11216.
+#' 
+#' Allawi H, SantaLucia J: Thermodynamics and NMR of internal G-T mismatches in DNA. Biochemistry 1997, 36:10581-10594.
+#' 
+#' Santalucia N E W J . Nearest-neighbor thermodynamics of deoxyinosine pairs in DNA duplexes[J]. Nucleic Acids Research, 2005, 33(19):6258-67.
+#' 
+#' Peyret N , Seneviratne P A , Allawi H T , et al. Nearest-Neighbor Thermodynamics and NMR of DNA Sequences with Internal A-A, C-C, G-G, and T-T Mismatches, [J]. Biochemistry, 1999, 38(12):3468-3477.
+#' 
+#' @author Junhui Li
+#' 
+#' @examples
+#' 
+#' ntseq <- c("AAAATTTTTTTCCCCCCCCCCCCCCGGGGGGGGGGGGTGTGCGCTGC")
+#' out <- Tm_NN(ntseq,Na=50)
+#' out
+#' out$Options
+#' 
+#' @export Tm_NN
+Tm_NN <- function(ntseq,
+                  ambiguous=FALSE,
+                  comSeq=NULL,
+                  shift=0,
+                  nn_table=c("DNA_NN4",
+                             "DNA_NN1",
+                             "DNA_NN2",
+                             "DNA_NN3",
+                             "RNA_NN1",
+                             "RNA_NN2",
+                             "RNA_NN3",
+                             "R_DNA_NN1"),
+                  tmm_table="DNA_TMM1",
+                  imm_table="DNA_IMM1",
+                  de_table=c("DNA_DE1",
+                             "RNA_DE1"),
+                  dnac1=25,
+                  dnac2=25,
+                  selfcomp=FALSE, 
+                  Na=0,
+                  K=0, 
+                  Tris=0, 
+                  Mg=0, 
+                  dNTPs=0, 
+                  saltcorr=c("Schildkraut2010",
+                             "Wetmur1991",
+                             "SantaLucia1996",
+                             "SantaLucia1998-1",
+                             "SantaLucia1998-2",
+                             "Owczarzy2004",
+                             "Owczarzy2008"),
+                  DMSO=0,
+                  fmd=0, 
+                  DMSOfactor=0.75,
+                  fmdfactor=0.65,
+                  fmdmethod=c("concentration","molar")){
+  nn_table <- match.arg(nn_table)
+  tmm_table <- match.arg(tmm_table)
+  imm_table <- match.arg(imm_table)
+  de_table <- match.arg(de_table)
+  saltcorr <- match.arg(saltcorr)
   DNA_NN1 <- matrix(c(0,0,0,0,0,0,0,-16.8,0,-20.1,0,0,0,-1.3,-9.1,-24,-8.6,-23.9,-6,-16.9,-5.8,-12.9,
                       -6.5,-17.3,-7.8,-20.8,-5.6,-13.5,-11.9,-27.8,-11.1,-26.7,-11,-26.6),ncol=2,byrow = TRUE)
   rownames(DNA_NN1) <- c("init","init_A/T","init_G/C","init_oneG/C","init_allA/T","init_5T/A","sym","AA/TT",
@@ -112,8 +282,9 @@ function(ntseq,ambiguous=FALSE,comSeq=NULL,shift=0,nn_table="DNA_NN4",tmm_table=
   
   mySeq <- check_filter(ntseq,method = "Tm_NN")
   mySeq_c2s <- c2s(mySeq)
-  if(is.null(comSeq) == TRUE){
-    comSeq <- complement(mySeq_c2s,F)
+  ptGC <- GC(mySeq,ambiguous = ambiguous,totalnt = TRUE)
+  if(is.null(comSeq)){
+    comSeq <- complement(mySeq_c2s,FALSE)
   }
   mycSeq <- check_filter(comSeq,method = "Tm_NN")
   
@@ -185,7 +356,7 @@ function(ntseq,ambiguous=FALSE,comSeq=NULL,shift=0,nn_table="DNA_NN4",tmm_table=
   delta_h <- nn_table_list['init',d_h]+delta_h
   delta_s <- nn_table_list['init',d_s]+delta_s
   
-  if(GC(mySeq) == 0){
+  if(ptGC == 0){
     delta_h <- nn_table_list['init_allA/T',d_h]+delta_h
     delta_s <- nn_table_list['init_allA/T',d_s]+delta_s
   }else{
@@ -203,12 +374,12 @@ function(ntseq,ambiguous=FALSE,comSeq=NULL,shift=0,nn_table="DNA_NN4",tmm_table=
   }
   
   ends <- c(mySeq[1],mySeq[length(mySeq)])
-  AT <- sum(ends %in% 'A')+sum(ends %in% 'T')
-  GC <- sum(ends %in% 'G')+sum(ends %in% 'C')
-  delta_h <- nn_table_list['init_A/T',d_h]*AT+delta_h
-  delta_s <- nn_table_list['init_A/T',d_s]*AT+delta_s
-  delta_h <- nn_table_list['init_G/C',d_h]*GC+delta_h
-  delta_s <- nn_table_list['init_G/C',d_s]*GC+delta_s
+  ATCount <- sum(ends %in% 'A')+sum(ends %in% 'T')
+  GCCount <- sum(ends %in% 'G')+sum(ends %in% 'C')
+  delta_h <- nn_table_list['init_A/T',d_h]*ATCount+delta_h
+  delta_s <- nn_table_list['init_A/T',d_s]*ATCount+delta_s
+  delta_h <- nn_table_list['init_G/C',d_h]*GCCount+delta_h
+  delta_s <- nn_table_list['init_G/C',d_s]*GCCount+delta_s
 
   for(bn in 1:(length(tmp_seq)-1)){
     neighbors <- paste0(c2s(tmp_seq[bn:(bn+1)]),'/',c2s(tmp_cseq[bn:(bn+1)]),collapse='')
@@ -236,19 +407,66 @@ function(ntseq,ambiguous=FALSE,comSeq=NULL,shift=0,nn_table="DNA_NN4",tmm_table=
     delta_s <- nn_table_list['sym',d_s]
   }
   R <- 1.987
-  if(saltcorr %in% c(1:7)){
-    corr = salt_correction(Na=Na, K=K, Tris=Tris, Mg=Mg, dNTPs=dNTPs,method=saltcorr, ntseq=mySeq)
-  }
-  if(saltcorr == 5){
-    delta_s <- corr+delta_s
-  }
-  Tm <- (1000*delta_h)/(delta_s+(R*(log(k))))-273.15
-  if(saltcorr %in% c(1:4)){
-    Tm <- Tm+corr
+  if(!is.null(saltcorr)){
+    corrSalt = salt_correction(Na=Na,K=K,Tris=Tris,Mg=Mg,dNTPs=dNTPs,method=saltcorr,ntseq=mySeq,ambiguous = ambiguous)
+    if(saltcorr == "SantaLucia1998-2"){
+      delta_s <- corrSalt+delta_s
+    }
+    Tm <- (1000*delta_h)/(delta_s+(R*(log(k))))-273.15
+    if(saltcorr %in% c("Schildkraut2010","Wetmur1991","SantaLucia1996","SantaLucia1998-1")){
+      Tm <- Tm+corrSalt
+    }
+    if(saltcorr %in% c("Owczarzy2004","Owczarzy2008")){
+      Tm <- (1/(1/(Tm+273.15)+corrSalt)-273.15)
+    }
+  }else{
+    Tm <- (1000*delta_h)/(delta_s+(R*(log(k))))-273.15
   }
   
-  if(saltcorr %in% c(6, 7)){
-    Tm <- (1/(1/(Tm+273.15)+corr)-273.15)
-  }
-  return(Tm)
+  corrChem <- chem_correction(DMSO=DMSO,fmd=fmd,DMSOfactor=DMSOfactor,fmdmethod=fmdmethod,fmdfactor=fmdfactor,ptGC=ptGC)
+  Tm <- Tm + corrChem
+  
+  NNTableList <- list("DNA_NN1"="Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>",
+                      "DNA_NN2"="Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>",
+                      "DNA_NN3"="Allawi H (1998) <doi:10.1093/nar/26.11.2694>",
+                      "DNA_NN4"="SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>",
+                      "RNA_NN1"="Freier S (1986) <doi:10.1073/pnas.83.24.9373>",
+                      "RNA_NN2"="Xia T (1998) <doi:10.1021/bi9809425>",
+                      "RNA_NN3"="Chen JL (2012) <doi:10.1021/bi3002709>",
+                      "R_DNA_NN1"="Sugimoto N (1995)<doi:10.1016/S0048-9697(98)00088-6>",
+                      "DNA_TMM1"="Bommarito S (2000)  <doi:10.1093/nar/28.9.1929>",
+                      "DNA_IMM1"="Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>",
+                      "DNA_DE1"="Bommarito S (2000) <doi:10.1093/nar/28.9.1929>",
+                      "RNA_DE1"="Turner D H (2010) <doi:10.1093/nar/gkp892>")
+
+  resultList <- vector('list',2L)
+  names(resultList) <- c("Tm","Options")
+  resultList$Tm <- as.numeric(Tm)
+  resultList$Options <- list("Sequence"=ntseq,
+                            "Check filter"=c2s(mySeq),
+                            "Ambiguous"=ambiguous,
+                            "Complement Sequence" = comSeq,  
+                            "Shift"= shift, 
+                            "Thermodynamic NN values" = paste0(nn_table,": ",NNTableList[[nn_table]]), 
+                            "Thermodynamic values for terminal mismatches" = paste0(tmm_table,": ",NNTableList[[tmm_table]]), 
+                            "Thermodynamic values for internal mismatches" = paste0(imm_table,": ",NNTableList[[imm_table]]),
+                            "Thermodynamic values for dangling ends" = paste0(de_table,": ",NNTableList[[de_table]]), 
+                            "Concentration of the higher concentrated strand" = dnac1,
+                            "Concentration of the lower concentrated strand" = dnac2, 
+                            "Sequence self-complementary" = selfcomp, 
+                            "Na"=Na,
+                            "K"=K,
+                            "Tris"=Tris,
+                            "Mg"=Mg,
+                            "dNTPs"=dNTPs,
+                            "Salt correlation method"=saltcorr,
+                            "Percent of DMSO"=DMSO,
+                            "Formamide concentration"=fmd,
+                            "Coeffecient of Tm decreases per percent DMSO"=DMSOfactor,
+                            "Method for formamide concentration"=fmdmethod,
+                            "Coefficient of Tm decrease per percent formamide"=fmdfactor,
+                            "Percent of GC"=ptGC)
+  class(resultList) <- c("TmCalculator","list")
+  attr(resultList, "nonhidden") <- "Tm"
+  return(resultList)
 }

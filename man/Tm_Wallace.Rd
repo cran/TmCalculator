@@ -5,7 +5,7 @@
 \alias{Tm_Wallace}
 \title{Calculate the melting temperature using the 'Wallace rule'}
 \usage{
-Tm_Wallace(ntseq, ambiguous = FALSE)
+Tm_Wallace(ntseq, ambiguous = FALSE, outlist = TRUE)
 }
 \arguments{
 \item{ntseq}{Sequence (5' to 3') of one strand of the DNA nucleic acid duplex
@@ -13,6 +13,8 @@ as string or vector of characters (\strong{Note:} Non-DNA characters are ignored
 by this method).}
 
 \item{ambiguous}{Ambiguous bases are taken into account to compute the G and C content when ambiguous is TRUE.}
+
+\item{outlist}{output a list of Tm and options or only Tm value, default is TRUE.}
 }
 \description{
 The Wallace rule is often used as rule of thumb for approximate melting temperature calculations for primers with 14 to 20 nt length.

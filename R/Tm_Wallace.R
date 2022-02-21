@@ -7,7 +7,9 @@
 #' by this method).
 #'    
 #' @param ambiguous Ambiguous bases are taken into account to compute the G and C content when ambiguous is TRUE. 
-#'    
+#' 
+#' @param outlist output a list of Tm and options or only Tm value, default is TRUE.
+#' 
 #' @export
 #' @encoding UTF-8
 #'
@@ -29,17 +31,21 @@
 #' 
 #' @export Tm_Wallace
 
-Tm_Wallace <- function (ntseq, ambiguous = FALSE){
+Tm_Wallace <- function (ntseq, ambiguous = FALSE,outlist = TRUE){
   mySeq <- check_filter(ntseq, method = "Tm_Wallace")
   nSeq <- length(mySeq)
   nGC <- nSeq * GC(mySeq, ambiguous = ambiguous,totalnt=TRUE)/100
   nAT <- nSeq - nGC
   Tm <- 4 * nGC + 2 * nAT
-  resultList <- vector('list',2L)
-  names(resultList) <- c("Tm","Options")
-  resultList$Tm <- Tm
-  resultList$Options <- list("Sequence"=ntseq,"Ambiguous"=ambiguous,"Check filter"=c2s(mySeq),Method="Thein & Wallace 1986")
-  class(resultList) <- c("TmCalculator","list")
-  attr(resultList, "nonhidden") <- "Tm"
+  if(outlist==FALSE){
+    resultList <- as.numeric(Tm)
+  }else{
+    resultList <- vector('list',2L)
+    names(resultList) <- c("Tm","Options")
+    resultList$Tm <- Tm
+    resultList$Options <- list("Sequence"=ntseq,"Ambiguous"=ambiguous,"Check filter"=c2s(mySeq),Method="Thein & Wallace 1986")
+    class(resultList) <- c("TmCalculator","list")
+    attr(resultList, "nonhidden") <- "Tm"
+  }
   return(resultList)
 }

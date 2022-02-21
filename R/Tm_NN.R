@@ -68,6 +68,8 @@
 #' 
 #' @param fmdmethod "concentration" method for formamide concentration in percentage and "molar" for formamide concentration in molar.
 #' 
+#' @param outlist output a list of Tm and options or only Tm value, default is TRUE.
+#' 
 #' @details 
 #' 
 #'  DNA_NN1: Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>
@@ -167,7 +169,8 @@ Tm_NN <- function(ntseq,
                   fmd=0, 
                   DMSOfactor=0.75,
                   fmdfactor=0.65,
-                  fmdmethod=c("concentration","molar")){
+                  fmdmethod=c("concentration","molar"),
+				  outlist=TRUE){
   nn_table <- match.arg(nn_table)
   tmm_table <- match.arg(tmm_table)
   imm_table <- match.arg(imm_table)
@@ -438,11 +441,13 @@ Tm_NN <- function(ntseq,
                       "DNA_IMM1"="Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>",
                       "DNA_DE1"="Bommarito S (2000) <doi:10.1093/nar/28.9.1929>",
                       "RNA_DE1"="Turner D H (2010) <doi:10.1093/nar/gkp892>")
-
-  resultList <- vector('list',2L)
-  names(resultList) <- c("Tm","Options")
-  resultList$Tm <- as.numeric(Tm)
-  resultList$Options <- list("Sequence"=ntseq,
+  if(outlist==FALSE){
+    resultList <- as.numeric(Tm)
+  }else{
+    resultList <- vector('list',2L)
+    names(resultList) <- c("Tm","Options")
+    resultList$Tm <- as.numeric(Tm)
+    resultList$Options <- list("Sequence"=ntseq,
                             "Check filter"=c2s(mySeq),
                             "Ambiguous"=ambiguous,
                             "Complement Sequence" = comSeq,  
@@ -466,7 +471,8 @@ Tm_NN <- function(ntseq,
                             "Method for formamide concentration"=fmdmethod,
                             "Coefficient of Tm decrease per percent formamide"=fmdfactor,
                             "Percent of GC"=ptGC)
-  class(resultList) <- c("TmCalculator","list")
-  attr(resultList, "nonhidden") <- "Tm"
+    class(resultList) <- c("TmCalculator","list")
+    attr(resultList, "nonhidden") <- "Tm"
+  }
   return(resultList)
 }

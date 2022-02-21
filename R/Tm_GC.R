@@ -34,6 +34,8 @@
 #' 
 #' @param fmdmethod "concentration" method for formamide concentration in percentage and "molar" for formamide concentration in molar
 #' 
+#' @param outlist output a list of Tm and options or only Tm value, default is TRUE.
+#' 
 #' @details 
 #' 
 #' Empirical constants coefficient with 8 variant:
@@ -104,7 +106,8 @@ Tm_GC <- function(ntseq,
                   fmd=0, 
                   DMSOfactor=0.75,
                   fmdfactor=0.65,
-                  fmdmethod=c("concentration","molar")){
+                  fmdmethod=c("concentration","molar"),
+				  outlist=TRUE){
   variant <- match.arg(variant)
   saltcorr <- match.arg(saltcorr)
   mySeq <- check_filter(ntseq,method='Tm_GC')
@@ -140,16 +143,16 @@ Tm_GC <- function(ntseq,
   
   corrChem <- chem_correction(DMSO=DMSO,fmd=fmd,DMSOfactor=DMSOfactor,fmdmethod=fmdmethod,fmdfactor=fmdfactor,ptGC=ptGC)
   Tm <- Tm + corrChem
-  
-  resultList <- vector('list',2L)
-  names(resultList) <- c("Tm","Options")
-  resultList$Tm <- as.numeric(Tm)
-  resultList$Options <- list("Sequence"=ntseq,"Check filter"=c2s(mySeq),"Variant"=variant,"Na"=Na,
-                            "K"=K,"Tris"=Tris,"Mg"=Mg,"dNTPs"=dNTPs,
-                            "Salt correlation"=saltcorr,"Ambiguous"=ambiguous,
-                            "Mismatch"=mismatch)
-  class(resultList) <- c("TmCalculator","list")
-  attr(resultList, "nonhidden") <- "Tm"
+  if(outlist==FALSE){
+    resultList <- as.numeric(Tm)
+  }else{
+    resultList <- vector('list',2L)
+    names(resultList) <- c("Tm","Options")
+    resultList$Tm <- as.numeric(Tm)
+    resultList$Options <- list("Sequence"=ntseq,"Check filter"=c2s(mySeq),"Variant"=variant,"Na"=Na,"K"=K,"Tris"=Tris,"Mg"=Mg,"dNTPs"=dNTPs,"Salt correlation"=saltcorr,"Ambiguous"=ambiguous,"Mismatch"=mismatch)
+    class(resultList) <- c("TmCalculator","list")
+    attr(resultList, "nonhidden") <- "Tm"
+  }
   return(resultList)
 }
 

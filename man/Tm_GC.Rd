@@ -22,7 +22,8 @@ Tm_GC(
   fmd = 0,
   DMSOfactor = 0.75,
   fmdfactor = 0.65,
-  fmdmethod = c("concentration", "molar")
+  fmdmethod = c("concentration", "molar"),
+  outlist = TRUE
 )
 }
 \arguments{
@@ -57,6 +58,8 @@ Tm_GC(
 \item{fmdfactor}{Coeffecient of Tm decrease per percent formamide. Default=0.65. Several papers report factors between 0.6 and 0.72.}
 
 \item{fmdmethod}{"concentration" method for formamide concentration in percentage and "molar" for formamide concentration in molar}
+
+\item{outlist}{output a list of Tm and options or only Tm value, default is TRUE.}
 }
 \description{
 Calculate the melting temperature using empirical formulas based on GC content with different options

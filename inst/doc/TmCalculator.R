@@ -1,0 +1,125 @@
+## ----setup, include = FALSE---------------------------------------------------
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 6
+)
+
+# Load required packages
+library(TmCalculator)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(GenomicRanges)
+library(IRanges)
+
+## ----install, eval = FALSE----------------------------------------------------
+# # Install required packages
+# suppressMessages({
+#   library(BiocManager)
+#   BiocManager::install(c("Biostrings", "BSgenome", "BSgenome.Hsapiens.UCSC.hg38"))
+# })
+# install.packages("TmCalculator")
+# pak::pkg_install("Gviz")
+# pak::pkg_install("JunhuiLi1017/TmCalculator@dev")
+
+## ----basic_usage, message=FALSE-----------------------------------------------
+# Calculate Tm for simple sequences
+seqs <- c("ATGCGCGAAAT", "GCTAGCTAGCT")
+names(seqs) <- c("chr1:1-11:+:seq1", "chr2:1-11:+:seq2")
+result <- tm_calculate(seqs, method = "tm_wallace")
+print(result)
+
+## ----genomic_input, message=FALSE---------------------------------------------
+# Example with genomic coordinates
+coords <- c(
+  "chr1:1898000-1898050:+:BSgenome.Hsapiens.UCSC.hg38:seq1",
+  "chr2:2563000-2563050:-:BSgenome.Hsapiens.UCSC.hg38:seq2"
+)
+result <- tm_calculate(coords)
+result
+
+## ----genomic_input_options, message=FALSE-------------------------------------
+result$tm$Options
+
+## ----fasta_processing, message=FALSE------------------------------------------
+# Process sequences from a FASTA file
+fasta_file <- system.file("extdata", "example1.fasta", package = "TmCalculator")
+result_fa <- tm_calculate(fasta_file)
+result_fa
+
+## ----complement_mismatch, message=FALSE---------------------------------------
+# Example with provided complementary sequences
+seqs <- c("GCTAGCCGACAATGGGCAGATAGTAGAAA")
+comp_seqs <- c("CGATCGGCTATTACCCGTCTATCATCTTT")
+result <- tm_calculate(input_seq=seqs,complement_seq=comp_seqs, method="tm_nn")
+result
+
+## ----complement_dangling_end, message=FALSE-----------------------------------
+seqs <- c("GCTAGCCGACAATGGGCAGATAGTAGAAA")
+comp_seqs <- c("GATCGGCTATTACCCGTCTATCATCTTT")
+result <- tm_calculate(input_seq=seqs,
+                       complement_seq=comp_seqs,
+                       method="tm_nn",
+                       shift=-1)
+result
+
+## ----tm_viz, message=FALSE----------------------------------------------------
+# Generate sample data with 150 sequences
+set.seed(123)
+
+# Generate 100 sequences for chr1
+chr1_starts <- sort(sample(1:249250621, 100))  # chr1 length in hg19
+chr1_lengths <- sample(50:200, 100, replace=TRUE)
+chr1_ends <- chr1_starts + chr1_lengths
+chr1_tms <- runif(100, min=60, max=80)
+
+# Generate 50 sequences for chr2
+chr2_starts <- sort(sample(1:243199373, 50))   # chr2 length in hg19
+chr2_lengths <- sample(50:200, 50, replace=TRUE)
+chr2_ends <- chr2_starts + chr2_lengths
+chr2_tms <- runif(50, min=60, max=80)
+
+# Create GRanges object
+tm_results <- GRanges(
+  seqnames = Rle(c(rep("chr1", 100), rep("chr2", 50))),
+  ranges = IRanges(
+    start = c(chr1_starts, chr2_starts),
+    end = c(chr1_ends, chr2_ends)
+  ),
+  strand = Rle(sample(c("+", "-"), 150, replace=TRUE)),
+  Tm = c(chr1_tms, chr2_tms)
+)
+genome(seqinfo(tm_results)) <- "hg38"
+
+# Example usage by plot_tm_karyotype
+plot_tm_karyotype(tm_results, genome_assembly = "hg38")
+
+# Example usage by plot_tm_genome_tracks with custom settings (plot_type=4)
+plot_tm_karyotype(tm_results,
+                  genome_assembly = "hg38",
+                  plot_type = 4,
+                  xaxis_cex = 0.5
+                  )
+
+# Example usage by plot_tm_genome_tracks with default settings (plot_type=1)
+plot_tm_genome_tracks(tm_results, chromosome_to_plot = "chr1", genome_assembly = "hg38")
+
+# Create example GRanges object  
+gr_tm <- GenomicRanges::GRanges(
+  seqnames = c("chr1", "chr2", "chr1", "chr2", "chr1"),
+  ranges = IRanges::IRanges(
+    start = c(100, 200, 300, 400, 150),
+    end = c(150, 250, 350, 450, 200)
+  ),
+  Tm = c(65.5, 68.2, 70.1, 63.8, 72.0)
+)
+
+# Plot with ideograms
+plot_tm_heatmap(gr_tm, genome_assembly = "hg19", plot_type = "karyogram")
+
+# Faceted plot by chromosome
+plot_tm_heatmap(gr_tm, genome_assembly = "hg19", plot_type = "faceted")
+
+## ----launch_shiny, eval = FALSE-----------------------------------------------
+# TmCalculatorShiny::TmCalculator_shiny()
+

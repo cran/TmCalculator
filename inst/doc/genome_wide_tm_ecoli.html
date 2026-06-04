@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Junhui Li, Lihua Julie Zhu" />
+
+<meta name="date" content="2026-06-03" />
+
+<title>Genome-wide Melting Temperature Profiling: An E. coli Case Study</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Genome-wide Melting Temperature Profiling:
+An E. coli Case Study</h1>
+<h4 class="author">Junhui Li, Lihua Julie Zhu</h4>
+<h4 class="date">2026-06-03</h4>
+
+
+
+<div id="introduction" class="section level1">
+<h1>Introduction</h1>
+<p>This vignette demonstrates how to compute melting temperature (Tm)
+across an entire bacterial genome in a reproducible, end-to-end workflow
+using <strong>TmCalculator</strong>. We use <em>Escherichia coli</em>
+K-12 MG1655 (NCBI assembly GCF_000005845.2 / ASM584v2) as the reference
+organism, calculating Tm for every non-overlapping 200 bp window along
+the single circular chromosome.</p>
+<p>The four steps covered here are:</p>
+<ol style="list-style-type: decimal">
+<li><strong>Build a BSgenome data package</strong> from the NCBI
+assembly accession.</li>
+<li><strong>Generate non-overlapping genomic windows</strong> with
+<code>make_genomiccoord()</code>.</li>
+<li><strong>Compute Tm and GC content</strong> for all windows with
+<code>tm_calculate()</code>.</li>
+<li><strong>Visualise</strong> the genome-wide Tm profile as a circular
+(Circos) plot, optionally overlaid with multi-omics tracks.</li>
+<li><strong>Test if the Tm values in the mutH peaks are significantly
+different from the rest of the genome</strong> with
+<code>test_granges_targets()</code>.</li>
+</ol>
+<p>By the end of this vignette you will have a publication-ready
+circular genome map showing how sequence composition—quantified through
+Tm—varies around the <em>E. coli</em> chromosome, and how it relates to
+independently measured genomic features such as mismatch-repair
+hotspots, microsatellite density, and cruciform-forming sequences.</p>
+<hr />
+</div>
+<div id="prerequisites" class="section level1">
+<h1>Prerequisites</h1>
+<div id="r-packages" class="section level2">
+<h2>R packages</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># Bioconductor core</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co">#BiocManager::install(c(</span></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#  &quot;BSgenomeForge&quot;,   # forge custom BSgenome packages from NCBI</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#  &quot;BSgenome&quot;,</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#  &quot;GenomicRanges&quot;</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#))</span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="fu">library</span>(TmCalculator)</span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="fu">library</span>(BSgenome)</span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="fu">library</span>(GenomicRanges)</span></code></pre></div>
+</div>
+<div id="build-bsgenome" class="section level2">
+<h2>Building the <em>E. coli</em> BSgenome data package</h2>
+<p>TmCalculator retrieves sequences from BSgenome data packages. Because
+an <em>E. coli</em> BSgenome package is not on Bioconductor, we forge
+one locally from the NCBI RefSeq assembly using
+<strong>BSgenomeForge</strong>. This step only needs to be run once;
+thereafter, install the resulting package and load it like any other
+BSgenome package.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(BSgenomeForge)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co"># Download the FASTA and build the data package (takes ~1–2 min)</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="fu">forgeBSgenomeDataPkgFromNCBI</span>(</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">assembly_accession =</span> <span class="st">&quot;GCF_000005845.2&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">pkg_maintainer     =</span> <span class="st">&quot;Junhui Li &lt;ljh.biostat@gmail.com&gt;&quot;</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="at">destdir            =</span> <span class="st">&quot;.&quot;</span>        <span class="co"># writes BSgenome.Ecoli.NCBI.ASM584v2/ here</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>)</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co"># Install the freshly forged package</span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="fu">install.packages</span>(</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  <span class="st">&quot;./BSgenome.Ecoli.NCBI.ASM584v2&quot;</span>,</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>  <span class="at">repos =</span> <span class="cn">NULL</span>,</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  <span class="at">type  =</span> <span class="st">&quot;source&quot;</span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>)</span></code></pre></div>
+<p>The GitHub repo ships package metadata only; sequence data must be
+forged once. The chunk below installs the package (if needed), forges it
+from NCBI when the <code>Ecoli</code> genome object is still missing,
+then loads it. <strong>Knit from the top</strong> so this chunk runs
+before <code>load-genome</code>.</p>
+<p>Load the genome (object <code>Ecoli</code>; package
+<code>BSgenome.Ecoli.NCBI.ASM584v2</code> for coordinates):</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>ecoli_pkg  <span class="ot">&lt;-</span> <span class="st">&quot;BSgenome.Ecoli.NCBI.ASM584v2&quot;</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>genome_obj <span class="ot">&lt;-</span> <span class="st">&quot;Ecoli&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="fu">suppressPackageStartupMessages</span>(<span class="fu">library</span>(ecoli_pkg, <span class="at">character.only =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>genome      <span class="ot">&lt;-</span> base<span class="sc">::</span><span class="fu">get</span>(genome_obj, <span class="at">envir =</span> <span class="fu">asNamespace</span>(ecoli_pkg))</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>genome_name <span class="ot">&lt;-</span> ecoli_pkg</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>chr_name    <span class="ot">&lt;-</span> <span class="st">&quot;U00096.3&quot;</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>chr_length  <span class="ot">&lt;-</span> <span class="fu">length</span>(genome[[chr_name]])</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Chromosome:&quot;</span>, chr_name, <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Length:    &quot;</span>, <span class="fu">format</span>(chr_length, <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;bp</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<hr />
+</div>
+</div>
+<div id="step-1-generate-genomic-windows" class="section level1">
+<h1>Step 1 — Generate Genomic Windows</h1>
+<p><code>make_genomiccoord()</code> tiles the chromosome into
+non-overlapping 200 bp bins and returns a character vector of coordinate
+strings accepted by <code>coor_to_genomic_ranges()</code>. Setting
+<code>slide = window</code> (both 200 bp) ensures the bins are
+contiguous and non-overlapping.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>bins_gc <span class="ot">&lt;-</span> <span class="fu">make_genomiccoord</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">bsgenome     =</span> genome,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">chromosomes  =</span> chr_name,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">window       =</span> <span class="dv">200</span><span class="dt">L</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">slide        =</span> <span class="dv">200</span><span class="dt">L</span>,          <span class="co"># non-overlapping: slide == window</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">start        =</span> <span class="dv">1</span>,</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>  <span class="at">end          =</span> chr_length,</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  <span class="at">strand       =</span> <span class="st">&quot;+&quot;</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Total windows:&quot;</span>, <span class="fu">length</span>(bins_gc), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Last window:  &quot;</span>, bins_gc[<span class="fu">length</span>(bins_gc)], <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div>
+<p><code>coor_to_genomic_ranges()</code> resolves each coordinate string
+against the BSgenome package and returns a <code>GRanges</code> object
+carrying the full sequence and its reverse complement:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>input_new <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">pkg_name =</span> genome_name,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">seq      =</span> bins_gc</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>runtime1 <span class="ot">&lt;-</span> <span class="fu">system.time</span>({</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>  gr_batch <span class="ot">&lt;-</span> <span class="fu">to_genomic_ranges_fast</span>(input_new)</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>})</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>  <span class="st">&quot;Coordinate resolution: %.2f s (elapsed)</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>  runtime1[<span class="st">&quot;elapsed&quot;</span>]</span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>))</span></code></pre></div>
+<hr />
+</div>
+<div id="step-2-compute-genome-wide-tm" class="section level1">
+<h1>Step 2 — Compute Genome-wide Tm</h1>
+<p>We calculate Tm for every window using the nearest-neighbor (NN)
+method with the SantaLucia &amp; Hicks (2004) parameter set and a
+standard monovalent salt concentration of 50 mM Na⁺. GC content is
+computed alongside Tm automatically.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>runtime2 <span class="ot">&lt;-</span> <span class="fu">system.time</span>({</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  tm_ASM584v2 <span class="ot">&lt;-</span> <span class="fu">tm_calculate</span>(</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>    gr_batch,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>    <span class="at">method   =</span> <span class="st">&quot;tm_nn&quot;</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="at">nn_table =</span> <span class="st">&quot;DNA_NN_SantaLucia_2004&quot;</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>    <span class="at">Na       =</span> <span class="dv">50</span>            <span class="co"># mM; standard PCR-like conditions</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  )</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>})</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>  <span class="st">&quot;Tm calculation: %.2f s (elapsed) for %s windows</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  runtime2[<span class="st">&quot;elapsed&quot;</span>],</span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>  <span class="fu">format</span>(<span class="fu">length</span>(bins_gc), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>)</span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a>))</span></code></pre></div>
+<p>The combined wall-clock time for both steps on a standard desktop is
+typically under 10 seconds for the full <em>E. coli</em> genome at 200
+bp resolution.</p>
+<p>Extract the Tm and GC-content columns into a plain data frame for
+downstream plotting:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>Tm <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(tm_ASM584v2<span class="sc">$</span>gr[, <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">6</span>)])</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co"># Quick summary</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="fu">summary</span>(Tm[, <span class="fu">c</span>(<span class="st">&quot;Tm&quot;</span>, <span class="st">&quot;GC&quot;</span>)])</span></code></pre></div>
+<hr />
+</div>
+<div id="step-3-visualise-the-genome-wide-tm-profile" class="section level1">
+<h1>Step 3 — Visualise the Genome-wide Tm Profile</h1>
+<div id="assemble-multi-track-data" class="section level2">
+<h2>Assemble multi-track data</h2>
+<p>We overlay the Tm/GC profile with four independently measured genomic
+datasets bundled in the <code>ecoli_rep_hotspots</code> data object:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Track</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MutL-AR</td>
+<td>MutL protein ChIP-seq peaks (mismatch-repair activity)</td>
+</tr>
+<tr class="even">
+<td>Microsatellites</td>
+<td>Tandem-repeat density per 200 bp bin</td>
+</tr>
+<tr class="odd">
+<td>Cruciform</td>
+<td>Cruciform-forming sequence density per 200 bp bin</td>
+</tr>
+<tr class="even">
+<td>ssDNA</td>
+<td>Single-stranded DNA regions</td>
+</tr>
+<tr class="odd">
+<td>GATC sites</td>
+<td>GATC methylation-site density per 200 bp bin</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">data</span>(ecoli_rep_hotspots)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co"># Reference labels: replication origin (ori) and terminus (dif)</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>label <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">seqnames =</span> genome_name,</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">start    =</span> <span class="fu">c</span>(<span class="dv">3925804</span>, <span class="dv">1590777</span>),</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>  <span class="at">end      =</span> <span class="fu">c</span>(<span class="dv">3925804</span>, <span class="dv">1590777</span>),</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>  <span class="at">label    =</span> <span class="fu">c</span>(<span class="st">&quot;ori&quot;</span>, <span class="st">&quot;dif&quot;</span>)</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>tracks <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  <span class="co"># --- Protein interaction ---</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>    <span class="at">type   =</span> <span class="st">&quot;rect&quot;</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>    <span class="at">data   =</span> ecoli_rep_hotspots<span class="sc">$</span>all_peaks_IP_mutH,</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>    <span class="at">col    =</span> <span class="st">&quot;black&quot;</span>,</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>    <span class="at">bg.col =</span> <span class="st">&quot;grey&quot;</span>,</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>    <span class="at">name   =</span> <span class="st">&quot;MutL-AR&quot;</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>  ),</span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>  <span class="co"># --- Sequence thermodynamics ---</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    <span class="at">type      =</span> <span class="st">&quot;line&quot;</span>,</span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    <span class="at">data      =</span> Tm,</span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>    <span class="at">value_col =</span> <span class="st">&quot;GC&quot;</span>,</span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>    <span class="at">name      =</span> <span class="st">&quot;GC content&quot;</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>  ),</span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>    <span class="at">type      =</span> <span class="st">&quot;line&quot;</span>,</span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a>    <span class="at">data      =</span> Tm,</span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>    <span class="at">value_col =</span> <span class="st">&quot;Tm&quot;</span>,</span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>    <span class="at">name      =</span> <span class="st">&quot;Melting temp&quot;</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a>  ),</span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a>  <span class="co"># --- Repeat / structural features ---</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a>    <span class="at">type      =</span> <span class="st">&quot;line&quot;</span>,</span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a>    <span class="at">data      =</span> ecoli_rep_hotspots<span class="sc">$</span>bins_rep,</span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a>    <span class="at">value_col =</span> <span class="st">&quot;count&quot;</span>,</span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a>    <span class="at">name      =</span> <span class="st">&quot;Microsatellites&quot;</span></span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a>  ),</span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a>    <span class="at">type      =</span> <span class="st">&quot;line&quot;</span>,</span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a>    <span class="at">data      =</span> ecoli_rep_hotspots<span class="sc">$</span>bins_cru,</span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a>    <span class="at">value_col =</span> <span class="st">&quot;count&quot;</span>,</span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a>    <span class="at">name      =</span> <span class="st">&quot;Cruciform&quot;</span></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a>  ),</span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a></span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a>  <span class="co"># --- ssDNA regions ---</span></span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a>    <span class="at">data =</span> ecoli_rep_hotspots<span class="sc">$</span>ssdna,</span>
+<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a>    <span class="at">name =</span> <span class="st">&quot;ssDNA&quot;</span></span>
+<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a>  ),</span>
+<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a></span>
+<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a>  <span class="co"># --- GATC methylation sites ---</span></span>
+<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a>    <span class="at">type      =</span> <span class="st">&quot;line&quot;</span>,</span>
+<span id="cb9-48"><a href="#cb9-48" tabindex="-1"></a>    <span class="at">data      =</span> ecoli_rep_hotspots<span class="sc">$</span>bins_gatc,</span>
+<span id="cb9-49"><a href="#cb9-49" tabindex="-1"></a>    <span class="at">value_col =</span> <span class="st">&quot;count&quot;</span>,</span>
+<span id="cb9-50"><a href="#cb9-50" tabindex="-1"></a>    <span class="at">name      =</span> <span class="st">&quot;GATC sites&quot;</span></span>
+<span id="cb9-51"><a href="#cb9-51" tabindex="-1"></a>  )</span>
+<span id="cb9-52"><a href="#cb9-52" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="full-circular-genome-map" class="section level2">
+<h2>Full circular genome map</h2>
+<p><code>plot_circos_genome()</code> renders all tracks as concentric
+rings around the chromosome, with the replication origin (ori) and
+terminus (dif) labelled:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">plot_circos_genome</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">genome_name =</span> genome_name,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">genome_size =</span> chr_length,</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">track_list  =</span> tracks,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">canvas.xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  <span class="at">canvas.ylim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>, <span class="dv">1</span>),</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="at">label       =</span> label</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="zoomed-view-upper-right-quadrant" class="section level2">
+<h2>Zoomed view — upper-right quadrant</h2>
+<p>To highlight a genomic region in detail, restrict
+<code>canvas.xlim</code> and <code>canvas.ylim</code> to a quadrant. The
+plot below focuses on the first quadrant (upper right), which spans
+roughly the first quarter of the chromosome starting from ori:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">plot_circos_genome</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="at">genome_name =</span> genome_name,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">genome_size =</span> chr_length,</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">track_list  =</span> tracks,</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">canvas.xlim =</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="dv">1</span>),</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="at">canvas.ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>,   <span class="dv">1</span>)</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="step-4-test-if-the-tm-values-in-the-muth-peaks-are-significantly-different-from-the-rest-of-the-genome" class="section level1">
+<h1>Step 4 — Test if the Tm values in the mutH peaks are significantly
+different from the rest of the genome</h1>
+<div id="step-1-build-the-muth-peak-granges" class="section level3">
+<h3>Step 1 — Build the mutH peak GRanges</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>mutH_peaks <span class="ot">&lt;-</span> <span class="fu">GRanges</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="at">seqnames =</span> ecoli_rep_hotspots<span class="sc">$</span>all_peaks_IP_mutH<span class="sc">$</span>chr,         <span class="co"># NC_000913.3</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">ranges   =</span> <span class="fu">IRanges</span>(<span class="at">start =</span> ecoli_rep_hotspots<span class="sc">$</span>all_peaks_IP_mutH<span class="sc">$</span>start,</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>                     <span class="at">end   =</span> ecoli_rep_hotspots<span class="sc">$</span>all_peaks_IP_mutH<span class="sc">$</span>end)</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="step-2-align-seqlevels-nc_000913.3-u00096.3" class="section level3">
+<h3>Step 2 — Align seqlevels: NC_000913.3 → U00096.3</h3>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="co"># tm_ASM584v2 uses the BSgenome name &quot;U00096.3&quot;; remap the peaks to match.</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="fu">seqlevels</span>(mutH_peaks) <span class="ot">&lt;-</span> <span class="st">&quot;U00096.3&quot;</span></span></code></pre></div>
+</div>
+<div id="step-3-annotate-each-tm-tile-with-which-peak-it-falls-into" class="section level3">
+<h3>Step 3 — Annotate each Tm tile with which peak it falls into</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>mutH_peaks<span class="sc">$</span>peak_id <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">&quot;mutH_&quot;</span>, <span class="fu">seq_along</span>(mutH_peaks))</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>tm_annot <span class="ot">&lt;-</span> <span class="fu">integrate_granges</span>(</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">gr_tm        =</span> tm_ASM584v2<span class="sc">$</span>gr,</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">gr_features  =</span> mutH_peaks,</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="at">strategy     =</span> <span class="st">&quot;overlap&quot;</span>,</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  <span class="at">feature_cols =</span> <span class="st">&quot;peak_id&quot;</span>,</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="at">keep_unmatched =</span> <span class="cn">TRUE</span>   <span class="co"># keep non-overlapping tiles so they form the &quot;non_peak&quot; group</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="step-4-add-a-two-level-grouping-column" class="section level3">
+<h3>Step 4 — Add a two-level grouping column</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>tm_annot<span class="sc">$</span>in_mutH <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="fu">is.na</span>(tm_annot<span class="sc">$</span>peak_id), <span class="st">&quot;non_peak&quot;</span>, <span class="st">&quot;peak&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">table</span>(tm_annot<span class="sc">$</span>in_mutH)</span></code></pre></div>
+</div>
+<div id="step-5-wilcoxon-on-tm-and-gc-peaks-vs-the-rest-of-the-genome" class="section level3">
+<h3>Step 5 — Wilcoxon on Tm and GC, peaks vs the rest of the genome</h3>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">compare_groups</span>(</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>  <span class="at">gr           =</span> tm_annot,</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>  <span class="at">target       =</span> <span class="fu">c</span>(<span class="st">&quot;Tm&quot;</span>, <span class="st">&quot;GC&quot;</span>),</span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>  <span class="at">method       =</span> <span class="st">&quot;wilcoxon&quot;</span>,</span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>  <span class="at">group        =</span> <span class="st">&quot;in_mutH&quot;</span>,</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">alternative  =</span> <span class="st">&quot;greater&quot;</span>,   <span class="co"># tests &quot;peak &gt; non_peak&quot;</span></span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">posthoc      =</span> <span class="cn">FALSE</span>     <span class="co"># only 2 groups, no post-hoc needed</span></span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>)</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a>res<span class="sc">$</span>results   <span class="co"># one row per target: test, statistic, p.value</span></span>
+<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a>res<span class="sc">$</span>summary   <span class="co"># per-group n, mean, sd, median</span></span></code></pre></div>
+<hr />
+</div>
+</div>
+<div id="interpreting-the-results" class="section level1">
+<h1>Interpreting the Results</h1>
+<p><strong>MutL-AR-associated windows have lower Tm and higher GC
+content</strong> than the rest of the genome (p-value &lt; 0.001 for
+both Tm and GC).</p>
+<p><strong>MutL-AR peaks cluster near the replication terminus.</strong>
+The mismatch-repair protein MutL accumulates preferentially in the
+terminus region (around <em>dif</em>), where replication forks converge
+and mismatch density is highest. This spatial coincidence with locally
+elevated microsatellite density and cruciform-forming sequence is
+consistent with the replication stress model of MMR recruitment.</p>
+<p><strong>GATC methylation sites are distributed genome-wide</strong>
+but show local density fluctuations that partially anti-correlate with
+GC content, reflecting the sequence context requirements for Dam
+methyltransferase (5′-GATC-3′).</p>
+<hr />
+<p>For human-scale analyses (non-overlapping 200 bp windows across the
+~3.1 Gb haploid genome, ~15.5 M windows), we recommend running
+<code>tm_calculate()</code> in parallelly using
+<code>BiocParallel</code> and splitting input by chromosome. Memory
+requirements scale approximately linearly with the number of
+windows.</p>
+<hr />
+</div>
+<div id="session-information" class="section level1">
+<h1>Session Information</h1>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
+<pre><code>## R version 4.4.1 (2024-06-14)
+## Platform: x86_64-apple-darwin20
+## Running under: macOS Sonoma 14.6
+## 
+## Matrix products: default
+## BLAS:   /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRblas.0.dylib 
+## LAPACK: /Library/Frameworks/R.framework/Versions/4.4-x86_64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+## 
+## locale:
+## [1] C/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## time zone: America/New_York
+## tzcode source: internal
+## 
+## attached base packages:
+## [1] stats4    stats     graphics  grDevices utils     datasets  methods  
+## [8] base     
+## 
+## other attached packages:
+##  [1] BSgenome.Hsapiens.UCSC.hg38_1.4.5 BSgenome_1.72.0                  
+##  [3] rtracklayer_1.64.0                BiocIO_1.14.0                    
+##  [5] Biostrings_2.72.1                 XVector_0.44.0                   
+##  [7] GenomicRanges_1.56.2              GenomeInfoDb_1.40.1              
+##  [9] IRanges_2.38.1                    S4Vectors_0.42.1                 
+## [11] BiocGenerics_0.50.0               TmCalculator_1.0.5               
+## 
+## loaded via a namespace (and not attached):
+##   [1] RColorBrewer_1.1-3          rstudioapi_0.18.0          
+##   [3] jsonlite_2.0.0              shape_1.4.6.1              
+##   [5] magrittr_2.0.4              GenomicFeatures_1.56.0     
+##   [7] farver_2.1.2                rmarkdown_2.30             
+##   [9] GlobalOptions_0.1.2         zlibbioc_1.50.0            
+##  [11] vctrs_0.7.1                 memoise_2.0.1              
+##  [13] Rsamtools_2.20.0            RCurl_1.98-1.17            
+##  [15] base64enc_0.1-6             htmltools_0.5.9            
+##  [17] S4Arrays_1.4.1              progress_1.2.3             
+##  [19] curl_6.2.3                  SparseArray_1.4.8          
+##  [21] Formula_1.2-5               sass_0.4.10                
+##  [23] bslib_0.10.0                htmlwidgets_1.6.4          
+##  [25] plyr_1.8.9                  Gviz_1.48.0                
+##  [27] httr2_1.1.2                 plotly_4.10.4              
+##  [29] cachem_1.1.0                GenomicAlignments_1.40.0   
+##  [31] lifecycle_1.0.5             pkgconfig_2.0.3            
+##  [33] Matrix_1.7-0                R6_2.6.1                   
+##  [35] fastmap_1.2.0               GenomeInfoDbData_1.2.12    
+##  [37] MatrixGenerics_1.16.0       digest_0.6.39              
+##  [39] colorspace_2.1-1            GGally_2.2.1               
+##  [41] OrganismDbi_1.46.0          AnnotationDbi_1.66.0       
+##  [43] bezier_1.1.2                regioneR_1.36.0            
+##  [45] Hmisc_5.2-3                 RSQLite_2.4.0              
+##  [47] labeling_0.4.3              filelock_1.0.3             
+##  [49] httr_1.4.7                  abind_1.4-8                
+##  [51] compiler_4.4.1              withr_3.0.2                
+##  [53] bit64_4.6.0-1               htmlTable_2.4.3            
+##  [55] backports_1.5.0             BiocParallel_1.38.0        
+##  [57] viridis_0.6.5               DBI_1.2.3                  
+##  [59] ggstats_0.9.0               biomaRt_2.60.1             
+##  [61] MASS_7.3-61                 rappdirs_0.3.4             
+##  [63] DelayedArray_0.30.1         rjson_0.2.23               
+##  [65] tools_4.4.1                 foreign_0.8-87             
+##  [67] otel_0.2.0                  karyoploteR_1.30.0         
+##  [69] nnet_7.3-19                 glue_1.8.0                 
+##  [71] restfulr_0.0.15             grid_4.4.1                 
+##  [73] checkmate_2.3.2             ade4_1.7-23                
+##  [75] reshape2_1.4.4              cluster_2.1.6              
+##  [77] generics_0.1.4              seqinr_4.2-36              
+##  [79] gtable_0.3.6                tidyr_1.3.1                
+##  [81] ensembldb_2.28.1            data.table_1.17.4          
+##  [83] hms_1.1.3                   xml2_1.5.2                 
+##  [85] pillar_1.10.2               stringr_1.6.0              
+##  [87] circlize_0.4.16             dplyr_1.1.4                
+##  [89] BiocFileCache_2.12.0        lattice_0.22-6             
+##  [91] bit_4.6.0                   deldir_2.0-4               
+##  [93] biovizBase_1.52.0           RBGL_1.80.0                
+##  [95] tidyselect_1.2.1            knitr_1.51                 
+##  [97] gridExtra_2.3               ggbio_1.52.0               
+##  [99] ProtGenerics_1.36.0         SummarizedExperiment_1.34.0
+## [101] xfun_0.56                   Biobase_2.64.0             
+## [103] matrixStats_1.5.0           stringi_1.8.7              
+## [105] UCSC.utils_1.0.0            lazyeval_0.2.2             
+## [107] yaml_2.3.12                 evaluate_1.0.5             
+## [109] codetools_0.2-20            interp_1.1-6               
+## [111] tibble_3.2.1                graph_1.82.0               
+## [113] BiocManager_1.30.27         cli_3.6.5                  
+## [115] rpart_4.1.23                jquerylib_0.1.4            
+## [117] dichromat_2.0-0.1           Rcpp_1.1.1                 
+## [119] dbplyr_2.5.0                png_0.1-8                  
+## [121] XML_3.99-0.18               parallel_4.4.1             
+## [123] ggplot2_3.5.2               blob_1.2.4                 
+## [125] prettyunits_1.2.0           latticeExtra_0.6-30        
+## [127] jpeg_0.1-11                 AnnotationFilter_1.28.0    
+## [129] bitops_1.0-9                txdbmaker_1.0.1            
+## [131] viridisLite_0.4.2           VariantAnnotation_1.50.0   
+## [133] scales_1.4.0                purrr_1.2.1                
+## [135] crayon_1.5.3                bamsignals_1.36.0          
+## [137] rlang_1.1.7                 KEGGREST_1.44.1</code></pre>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

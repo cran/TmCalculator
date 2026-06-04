@@ -15,12 +15,17 @@
 #' @param variant Empirical constants coefficient with 8 variants:
 #'   - Chester1993: Tm = 69.3 + 0.41(Percentage_GC) - 650/N
 #'   - QuikChange: Tm = 81.5 + 0.41(Percentage_GC) - 675/N - Percentage_mismatch
-#'   - Schildkraut1965: Tm = 81.5 + 0.41(Percentage_GC) - 675/N + 16.6 x log[Na+]
-#'   - Wetmur1991_MELTING: Tm = 81.5 + 0.41(Percentage_GC) - 500/N + 16.6 x log([Na+]/(1.0 + 0.7 x [Na+])) - Percentage_mismatch
-#'   - Wetmur1991_RNA: Tm = 78 + 0.7(Percentage_GC) - 500/N + 16.6 x log([Na+]/(1.0 + 0.7 x [Na+])) - Percentage_mismatch
-#'   - Wetmur1991_RNA/DNA: Tm = 67 + 0.8(Percentage_GC) - 500/N + 16.6 x log([Na+]/(1.0 + 0.7 x [Na+])) - Percentage_mismatch
-#'   - Primer3Plus: Tm = 81.5 + 0.41(Percentage_GC) - 600/N + 16.6 x log[Na+]
-#'   - vonAhsen2001: Tm = 77.1 + 0.41(Percentage_GC) - 528/N + 11.7 x log[Na+]
+#'   - Schildkraut1965: Tm = 81.5 + 0.41(%GC) - 675/N + 16.6 x log10[Na+]
+#'   - Wetmur1991_MELTING: Tm = 81.5 + 0.41(%GC) - 500/N + 16.6 x log10([Na+]/(1 + 0.7 x [Na+])) - %mismatch
+#'   - Wetmur1991_RNA: Tm = 78 + 0.7(%GC) - 500/N + 16.6 x log10([Na+]/(1 + 0.7 x [Na+])) - %mismatch
+#'   - Wetmur1991_RNA/DNA: Tm = 67 + 0.8(%GC) - 500/N + 16.6 x log10([Na+]/(1 + 0.7 x [Na+])) - %mismatch
+#'   - Primer3Plus: Tm = 81.5 + 0.41(%GC) - 600/N + 16.6 x log10[Na+]
+#'   - vonAhsen2001: Tm = 77.1 + 0.41(%GC) - 528/N + 11.7 x log10[Na+]
+#'
+#'   Salt correction is applied only for variants that include it in the formula
+#'   (via \code{salt_correction()}). Chester1993 and QuikChange use no salt term.
+#'   D is the mismatch penalty (typically 1): Tm decreases by D x (%mismatch).
+#'   Use \code{X} (or \code{.}) in the sequence to mark mismatch positions.
 #' 
 #' @param Na Millimolar concentration of sodium ions. Default: 50
 #' 
@@ -32,7 +37,9 @@
 #' 
 #' @param dNTPs Millimolar concentration of deoxynucleotide triphosphates. Default: 0
 #' 
-#' @param salt_corr_method Salt correction method. Options are:
+#' @param salt_method Salt correction method. \code{NULL} (default) uses the
+#'   method associated with \code{variant}. Set to \code{NA} to disable salt
+#'   correction. Options:
 #'   - "Schildkraut2010": Schildkraut & Lifson 1965
 #'   - "Wetmur1991": Wetmur 1991
 #'   - "SantaLucia1996": SantaLucia 1996
@@ -41,11 +48,11 @@
 #'   - "Owczarzy2008": Owczarzy 2008
 #'   Note: "SantaLucia1998-2" is not available for this function.
 #'   
-#' @param mismatch Logical. If TRUE (default), every '.' in the sequence is counted as a mismatch
+#' @param mismatch Logical. If TRUE (default), every 'X' in the sequence is counted as a mismatch
 #' 
 #' @param DMSO Percent DMSO concentration in the reaction mixture. Default: 0
 #' 
-#' @param formamide_value_unit List containing formamide concentration value and unit. Default: list(value = 0, unit = "percent")
+#' @param formamide_unit Formamide concentration as `list(value, unit)`. Default: list(value = 0, unit = "percent")
 #'   - value: Numeric value of formamide concentration
 #'   - unit: Either "percent" or "molar"
 #' 
@@ -99,7 +106,7 @@ tm_gc <- function(gr_seq,
                   Tris = 0,
                   Mg = 0,
                   dNTPs = 0,
-                  salt_corr_method = c("Schildkraut2010",
+                  salt_method = c("Schildkraut2010",
                                     "Wetmur1991",
                                     "SantaLucia1996",
                                     "SantaLucia1998-1",
@@ -107,22 +114,22 @@ tm_gc <- function(gr_seq,
                                     "Owczarzy2008"),
                   mismatch = TRUE,
                   DMSO = 0,
-                  formamide_value_unit = list(value = 0, unit = "percent"),
+                  formamide_unit = list(value = 0, unit = "percent"),
                   dmso_factor = 0.75,
                   formamide_factor = 0.65) {
   variant <- match.arg(variant)
-  salt_corr_method <- match.arg(salt_corr_method)
+  salt_method <- match.arg(salt_method)
   
   if (is.null(userset)) {
-    if (!variant %in% rownames(thermodynamic_gc_params)) {
+    if (!variant %in% rownames(get_table("GC_VARTAB"))) {
       stop("only Chester1993, QuikChange, Schildkraut1965, Wetmur1991_MELTING, Wetmur1991_RNA, Wetmur1991_RNA/DNA, Primer3Plus and vonAhsen2001 are allowed in variant")
     } else {
-      gc_coef <- thermodynamic_gc_params[variant,]
-      salt_corr_method <- thermodynamic_gc_params[variant,"salt_correction"]
+      gc_coef <- get_table("GC_VARTAB")[variant,]
+      salt_method <- get_table("GC_VARTAB")[variant,"salt_correction"]
     }
   } else {
     gc_coef <- as.numeric(userset)
-    salt_corr_method <- salt_corr_method
+    salt_method <- salt_method
   }
 
   # Filter sequence
@@ -138,33 +145,66 @@ tm_gc <- function(gr_seq,
       mismatch_count <- sum(filtered_seq %in% 'X')
       tm <- tm - gc_coef[4]*(mismatch_count*100/n_seq)
     }
-    if (!is.null(salt_corr_method)) {
-      corr_salt <- salt_correction(Na = Na, 
-                                   K = K, 
-                                   Tris = Tris, 
-                                   Mg = Mg, 
-                                   dNTPs = dNTPs, 
-                                   method = salt_corr_method, 
-                                   input_seq = filtered_seq, 
-                                   ambiguous = ambiguous)
-      tm <- tm + corr_salt
+    if (!is.null(userset)) {
+      corr_salt <- salt_correction(Na = Na,
+                                  K = K, 
+                                  Tris = Tris, 
+                                  Mg = Mg,
+                                  dNTPs = dNTPs,
+                                  method = salt_method,
+                                  input_seq = filtered_seq,
+                                  ambiguous = ambiguous)
+    } else {
+      if (variant %in% c("Schildkraut1965", "Wetmur1991_MELTING", "Wetmur1991_RNA", "Wetmur1991_RNA/DNA", "Primer3Plus", "vonAhsen2001")) {
+        if (variant == "Schildkraut1965") {
+          salt_method <- "Schildkraut2010"
+        } else if (variant == "Wetmur1991_MELTING") {
+          salt_method <- "Wetmur1991"
+        } else if (variant == "Wetmur1991_RNA") {
+          salt_method <- "Wetmur1991"
+        } else if (variant == "Wetmur1991_RNA/DNA") {
+          salt_method <- "Wetmur1991"
+        } else if (variant == "Primer3Plus") {
+          salt_method <- "Schildkraut2010"
+        } else if (variant == "vonAhsen2001") {
+          salt_method <- "SantaLucia1998-1"
+        }
+        corr_salt <- salt_correction(Na = Na,
+                                    K = K, 
+                                    Tris = Tris, 
+                                    Mg = Mg,
+                                    dNTPs = dNTPs,
+                                    method = salt_method,
+                                    input_seq = filtered_seq,
+                                    ambiguous = ambiguous)
+      } else {
+        corr_salt <- 0
+      }
     }
-    if (!is.na(DMSO)) {
+
+    tm <- tm + corr_salt
+
+    if (DMSO > 0 | formamide_unit$value > 0) {
       corr_chem <- chem_correct(DMSO = DMSO, 
-                                   formamide_value_unit = formamide_value_unit, 
+                                   formamide_unit = formamide_unit, 
                                    dmso_factor = dmso_factor, 
                                    formamide_factor = formamide_factor, 
                                    pt_gc = pt_gc)
       tm <- tm + corr_chem
     }
-    return(tm)
+    return(list(Tm = tm, GC = pt_gc))
   })
-  gr_seq$Tm <- seq_tm
   
+  gr_seq$GC <- unlist(seq_tm[2,])
+  gr_seq$Tm <- unlist(seq_tm[1,])
+  gr_seq <- .normalize_tm_gc_metadata(gr_seq)
+
   # Create result list with proper structure
+  df_gr <- as.data.frame(gr_seq)
   result_list <- list(
-    Tm = gr_seq,
-    Options = list(
+    gr = gr_seq,
+    df = df_gr,
+    options = list(
       Ambiguous = ambiguous,
       Method = paste0(variant, " (", 
                      if (variant == "Chester1993") "Chester & Marshak 1993" else
@@ -180,19 +220,19 @@ tm_gc <- function(gr_seq,
       Tris = Tris,
       Mg = Mg,
       dNTPs = dNTPs,
-      "Salt correction" = salt_corr_method,
+      "Salt correction" = salt_method,
       Mismatch = mismatch,
       "Percent of DMSO" = DMSO,
-      "Formamide concentration" = formamide_value_unit$value,
-      "Method for formamide concentration" = formamide_value_unit$unit,
-      "Coeffecient of Tm decreases per percent DMSO" = dmso_factor,
-      "Coefficient of Tm decrease per percent formamide" = formamide_factor
+      "Formamide concentration" = formamide_unit$value,
+      "Formamide concentration unit" = formamide_unit$unit,
+      "DMSO factor" = dmso_factor,
+      "Formamide factor" = formamide_factor
     )
   )
   
   # Set class and attributes
   class(result_list) <- c("TmCalculator", "list")
-  attr(result_list, "nonhidden") <- "Tm"
+  attr(result_list, "nonhidden") <- "gr"
   
   return(result_list)
 }

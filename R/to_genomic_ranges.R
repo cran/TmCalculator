@@ -76,7 +76,7 @@ to_genomic_ranges <- function(input_seq, complement_seq = NULL) {
   } else if (is.character(input_seq)) {
     input_gr <- vec_to_genomic_ranges(input_seq)
   } else {
-    stop("Input sequence must be a character string (e.g., c('ATGCG', 'GCTAG') ), a character vector of genomic coordinate (e.g., 'chr1:100-200:+:BSgenome.Hsapiens.UCSC.hg38'), or a FASTA file")
+    stop("Input sequence must be a character string (e.g., c('ATGCG', 'GCTAG') ), a character vector of genomic coordinate (e.g., 'chr1:100100-100200:+:BSgenome.Hsapiens.UCSC.hg38'), or a FASTA file")
   }
   
   # Process complementary sequences if provided
@@ -247,80 +247,4 @@ fa_to_genomic_ranges <- function(input_seq) {
   # Create the GenomicRanges object
   gr <- vec_to_genomic_ranges(seq_vector)
   return(gr)
-}
-
-#' Convert genomic coordinate strings to GenomicRanges object with sequences
-#' 
-#' This function converts genomic coordinate strings in the format "chr:start-end:strand:species[:name]"
-#' to a GenomicRanges object containing the corresponding sequences from the specified reference genome.
-#' 
-#' @param input_seq A character vector where each element is a string in the format:
-#'   "chr:start-end:strand:species[:name]"
-#'   - chr: Chromosome ID (e.g., "chr1", "chrX")
-#'   - start: Start position (integer)
-#'   - end: End position (integer)
-#'   - strand: "+" for positive strand or "-" for negative strand
-#'   - species: Species name for reference genome (e.g., "hg38")
-#'   - name: (optional) Custom name for the sequence
-#' 
-#' @return A GenomicRanges object containing:
-#'   - GRanges information (seqnames, ranges, strand)
-#'   - sequence data from the reference genome
-#'   - Names either from the optional name parameter or auto-generated as "1", "2", etc.
-#' 
-#' @examples
-#' \dontrun{
-#' # Example with multiple coordinates
-#' coords <- c(
-#'   "chr1:1898000-1898050:+:BSgenome.Hsapiens.UCSC.hg38:exon1",
-#'   "chr2:2563000-2563050:-:BSgenome.Hsapiens.UCSC.hg38:exon2"
-#' )
-#' gr <- coor_to_genomic_ranges(coords)
-#' }
-#' 
-#' @export
-
-coor_to_genomic_ranges <- function(input_seq){
-  all_genomes <- BSgenome::available.genomes()
-  suppressWarnings({
-    genomic_range_object <- do.call(c,sapply(seq_along(input_seq), function(i){
-      x <- input_seq[i] # Get the current input string using the index 'i'
-      parts <- strsplit(x, ":")[[1]]
-      chrom_x <- parts[1]
-      position_x <- as.integer(unlist(strsplit(parts[2],"-")))
-      strand_x <- parts[3]
-      ref_genome_pkg_name <- parts[4]
-      
-      # Extract name_x if 5 parts, otherwise it will be NA/null for naming purposes
-      name_x <- if(length(parts) == 5) parts[5] else i
-      
-      # --- Validation and loading of genome package ---
-      if (!ref_genome_pkg_name %in% all_genomes) {
-        stop(sprintf("Genome package %s not found. Please make sure the genome package name is correct. See BSgenome::available.genomes() for all available genomes.", ref_genome_pkg_name))
-      }
-      if (!requireNamespace(ref_genome_pkg_name, quietly = TRUE)) {
-        stop(sprintf("Genome package %s not found. Please install it first using BiocManager::install(\"%s\").", ref_genome_pkg_name, ref_genome_pkg_name))
-      }
-      #suppressPackageStartupMessages(
-        library(ref_genome_pkg_name, character.only = TRUE)
-      #)
-      
-      genome <- get(ref_genome_pkg_name)
-      
-      # --- Create GRanges object and fetch sequence ---
-      sub_genomic_range <- GenomicRanges::GRanges(
-        seqnames = chrom_x,
-        ranges = IRanges(start = position_x[1], end = position_x[2]),
-        strand = strand_x
-      )
-      names(sub_genomic_range) <- name_x
-      
-      # Fetch the sequence
-      sub_genomic_range$sequence <- Biostrings::getSeq(genome, sub_genomic_range)
-      sub_genomic_range$genome <- ref_genome_pkg_name
-      
-      return(sub_genomic_range)
-    }))
-  })
-  return(genomic_range_object)
 }

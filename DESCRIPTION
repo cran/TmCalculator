@@ -1,10 +1,9 @@
 Package: TmCalculator
 Type: Package
-Title: Extending Nucleic Acid Melting Temperature Analysis from
-        Sequence-Level Computation to Genome-Wide Thermodynamic
-        Profiling
-Version: 1.0.5
-Date: 2026-05-29
+Title: Genome-Wide Nucleic Acid Melting Temperature Profiling and
+        Multi-Omics Integration
+Version: 1.0.6
+Date: 2026-06-12
 Authors@R: c(
     person(given = "Junhui", family = "Li", email = "ljh.biostat@gmail.com", role = c("cre","aut"),
            comment = c(ORCID = "0000-0003-3973-1700")),
@@ -15,20 +14,19 @@ BugReports: https://github.com/JunhuiLi1017/TmCalculator/issues
 License: MIT + file LICENSE
 Depends: R (>= 3.5)
 VignetteBuilder: knitr
-Imports: seqinr, methods, BSgenome, Biostrings, GenomicRanges, IRanges,
-        S4Vectors, GenomeInfoDb, Gviz, dplyr, ggbio, ggplot2,
-        karyoploteR, circlize, graphics, grDevices, viridis, rlang,
-        plotly
-Suggests: testthat (>= 3.0.0), knitr, rmarkdown, devtools, roxygen2,
-        remotes, BiocManager, BSgenomeForge,
-        BSgenome.Hsapiens.UCSC.hg38
+Imports: BSgenome, BiocGenerics, Biostrings, GenomeInfoDb,
+        GenomicRanges, IRanges, S4Vectors, graphics, grDevices, methods
+Suggests: testthat (>= 3.0.0), knitr, utils, rmarkdown, remotes,
+        BiocManager, BSgenomeForge, BSgenome.Hsapiens.UCSC.hg38,
+        karyoploteR, ggridges, ggforce, ggplot2, rlang, seqinr
 NeedsCompilation: no
 Repository: CRAN
 RoxygenNote: 7.3.2
 LazyData: true
+LazyDataCompression: xz
 Encoding: UTF-8
-Packaged: 2026-06-03 15:42:12 UTC; lij11
+Packaged: 2026-06-13 05:24:04 UTC; lij11
 Author: Junhui Li [cre, aut] (ORCID: <https://orcid.org/0000-0003-3973-1700>),
   Lihua Julie Zhu [aut] (ORCID: <https://orcid.org/0000-0001-7416-0590>)
 Maintainer: Junhui Li <ljh.biostat@gmail.com>
-Date/Publication: 2026-06-04 15:00:11 UTC
+Date/Publication: 2026-06-13 16:30:08 UTC

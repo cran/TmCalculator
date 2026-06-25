@@ -2,8 +2,8 @@ Package: TmCalculator
 Type: Package
 Title: Genome-Wide Nucleic Acid Melting Temperature Profiling and
         Multi-Omics Integration
-Version: 1.0.6
-Date: 2026-06-12
+Version: 1.0.7
+Date: 2026-06-25
 Authors@R: c(
     person(given = "Junhui", family = "Li", email = "ljh.biostat@gmail.com", role = c("cre","aut"),
            comment = c(ORCID = "0000-0003-3973-1700")),
@@ -18,15 +18,15 @@ Imports: BSgenome, BiocGenerics, Biostrings, GenomeInfoDb,
         GenomicRanges, IRanges, S4Vectors, graphics, grDevices, methods
 Suggests: testthat (>= 3.0.0), knitr, utils, rmarkdown, remotes,
         BiocManager, BSgenomeForge, BSgenome.Hsapiens.UCSC.hg38,
-        karyoploteR, ggridges, ggforce, ggplot2, rlang, seqinr
+        karyoploteR, ggplot2, ggridges, ggforce, rlang, seqinr
 NeedsCompilation: no
 Repository: CRAN
 RoxygenNote: 7.3.2
 LazyData: true
 LazyDataCompression: xz
 Encoding: UTF-8
-Packaged: 2026-06-13 05:24:04 UTC; lij11
+Packaged: 2026-06-25 04:58:55 UTC; lij11
 Author: Junhui Li [cre, aut] (ORCID: <https://orcid.org/0000-0003-3973-1700>),
   Lihua Julie Zhu [aut] (ORCID: <https://orcid.org/0000-0001-7416-0590>)
 Maintainer: Junhui Li <ljh.biostat@gmail.com>
-Date/Publication: 2026-06-13 16:30:08 UTC
+Date/Publication: 2026-06-25 11:10:17 UTC

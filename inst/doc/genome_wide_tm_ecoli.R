@@ -28,7 +28,7 @@ library(GenomicRanges)
 #   type  = "source"
 # )
 
-## ----setup-ecoli-bsgenome, echo=FALSE, message=FALSE, warning=FALSE-----------
+## ----setup-ecoli-bsgenome, message=FALSE, warning=FALSE-----------------------
 ecoli_pkg   <- "BSgenome.Ecoli.NCBI.ASM584v2"
 genome_obj  <- "Ecoli"   # BSgenomeObjname in DESCRIPTION; not the package name
 
@@ -196,7 +196,7 @@ plot_genome_track(
   genome_name = genome_name,
   genome_size = chr_length,
   track_list  = tracks,
-  zoom        = "U00096.3:1000000-2000000"
+  zoom        = c("U00096.3:100000-500000")
 )
 
 ## ----zoom-multi-linear, fig.width=10, fig.height=8, fig.cap="Two zoomed regions displayed as stacked linear panels."----
@@ -204,18 +204,8 @@ plot_genome_track(
   genome_name = genome_name,
   genome_size = chr_length,
   track_list  = tracks,
-  zoom        = c("U00096.3:1000000-1200000",
-                   "U00096.3:3000000-3200000")
-)
-
-## ----zoom-multi-circular, fig.width=8, fig.height=8, fig.cap="Two zoomed regions concatenated on a circular plot. Dashed lines separate the regions."----
-plot_genome_track(
-  genome_name = genome_name,
-  genome_size = chr_length,
-  track_list  = tracks,
-  circular    = TRUE,
-  zoom        = c("U00096.3:1000000-1200000",
-                   "U00096.3:3000000-3200000")
+  zoom        = c("U00096.3:100000-500000",
+                  "U00096.3:3600000-4500000")
 )
 
 ## ----circular-pan, fig.width=7, fig.height=7, fig.cap="Panned circular view showing the upper-right quadrant of the E. coli chromosome."----

@@ -204,6 +204,7 @@ plot_genome_track(
   genome_name = genome_name,
   genome_size = chr_length,
   track_list  = tracks,
+  circular    = TRUE,
   zoom        = c("U00096.3:100000-500000",
                   "U00096.3:3600000-4500000")
 )

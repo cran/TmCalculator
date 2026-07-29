@@ -1,4 +1,4 @@
-6d66d49be59688fc75d351bfa501ddfd *DESCRIPTION
+bb1ef6ff9fc9d34b2277966cf3f70b7b *DESCRIPTION
 0f5649d6ecfc09873d4a206116e595a9 *LICENSE
 1aac2b96990824b6d79a1ef1e3bb1233 *NAMESPACE
 57917d0e9b5082003fb8ba737aec727d *R/GC.R
@@ -29,9 +29,9 @@ f51fcdcef0059a3b99688ab7655d8c8e *README.md
 a7994afe0dedeed6ca2de96b3afa4ab6 *data/ecoli_rep_hotspots.rda
 a16c815842b4d6e238571c2fe8304ee7 *data/thermodynamic_gc_params.RData
 8957e84a4ae4a445e6fcab421f3c5908 *data/thermodynamic_nn_params.RData
-aff5f1808d899b382459d39c83374116 *inst/doc/genome_wide_tm_ecoli.R
-c07bb12dbd1794d6d63f153f5e3d8d16 *inst/doc/genome_wide_tm_ecoli.Rmd
-ecc60aeab48b8e7fef2e425638960199 *inst/doc/genome_wide_tm_ecoli.html
+4bb2cb3104d7c48d5bcb8c487e7aeb0e *inst/doc/genome_wide_tm_ecoli.R
+63666b5e69704a5ab244597ea70d15cb *inst/doc/genome_wide_tm_ecoli.Rmd
+d842d2048e5e3bf10dbef9629861351f *inst/doc/genome_wide_tm_ecoli.html
 42560f1afe1ac2a85981b74b58ad3ecd *inst/extdata/BSgenome.Hsapiens.UCSC.hg38.fasta
 fd78b904a716731eae8f2447e503abe6 *inst/extdata/example1.fasta
 c5eb560a352d26a6af1ad9d76b3b7a35 *inst/extdata/example2.fasta
@@ -76,4 +76,4 @@ b8eb3368ec81e55f4437f51e8f8012a2 *man/to_genomic_ranges.Rd
 9066e050e761f5c80447860fca9e5a58 *man/vec_to_genomic_ranges.Rd
 d375370dd5390d8b8bfa9d87eaf0723a *tests/testthat.R
 ba5c4593857db764391629ac230608ba *tests/testthat/test_tm_calculate.R
-c07bb12dbd1794d6d63f153f5e3d8d16 *vignettes/genome_wide_tm_ecoli.Rmd
+63666b5e69704a5ab244597ea70d15cb *vignettes/genome_wide_tm_ecoli.Rmd

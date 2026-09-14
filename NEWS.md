@@ -1,73 +1,177 @@
-# TmCalculator 1.0.9
+# TmCalculator 1.1.0
+
+## Bug fix affecting all nearest-neighbor Tm values
+
+* **Four of the six reverse-complement rows added to every nearest-neighbor
+  table were transposed, so `tm_nn()` returned incorrect Tm values for any
+  sequence containing an AC, AG, TC or TG step.** A key `XY/WZ` denotes the
+  duplex 5'-XY-3' / 3'-WZ-5'; read from the other strand the same stack is
+  written as the character reversal of the key. `.complete_nn_rc()` instead
+  gave `AC/TG` and `TG/AC` each other's parameters, and likewise `AG/TC` and
+  `TC/AG`.
+
+  Every table built through that helper was affected, which is all of the
+  DNA and RNA sets including `DNA_NN_Breslauer_1986` and
+  `DNA_NN_SantaLucia_2004`. `RNA_DNA_NN_Sugimoto_1995` and the RNA/DNA hybrid
+  sets ship with all sixteen pairs and were never completed, so they are
+  unaffected.
+
+  The size of the error depends on how far apart the transposed rows are in a
+  given table and on how often the affected steps occur, so it is
+  sequence-dependent rather than a constant offset. It is small for
+  SantaLucia 2004 (the transposed pairs differ by 0.1 and 0.4 kcal/mol) and
+  considerably larger for Breslauer 1986 (0.7 and 2.2 kcal/mol). **Any Tm
+  computed with a previous release should be recomputed.**
+
+  Found by recovering dH and dS from `Tm_NN` in Biopython and from MELTING 5
+  and comparing them with this package: those two agree with each other on
+  the sequence-dependent part of the sum, and this package did not.
+  `tests/testthat/test_nn_rc_completion.R` now re-derives the mapping from
+  the reversal rule rather than restating it, and pins the four affected rows
+  to their published values.
+
+## Breaking changes
+
+* **`gc()` has been renamed `gc_content()` and is no longer exported under its
+  old name.** The exported `gc()` masked `base::gc()` for every user of the
+  package, so attaching it printed a masking warning and any subsequent call
+  to the garbage collector needed a `base::` prefix, including inside this
+  package's own benchmark scripts.
+
+  No deprecated alias is kept, because keeping one would preserve exactly the
+  masking the rename is meant to remove. Existing calls fail loudly rather
+  than silently: `gc("ACGT")` now reaches `base::gc()`, whose first argument
+  is `verbose`, and errors instead of returning a plausible number.
+
+* **`GC` is now a percentage everywhere, computed as
+  `100 * (G+C)/(A+C+G+T)`.** `coor_to_genomic_ranges()` previously wrote this
+  column as a fraction (0–1) computed over the full window width, so the same
+  `GC` column meant different things depending on how the object had been
+  built, and windows overlapping assembly gaps appeared GC-poor because N sat
+  in the denominator. Objects built by `coor_to_genomic_ranges()` will report
+  values 100× larger than before, and slightly larger again wherever N is
+  present. Values from `tm_gc()`, `tm_wallace()` and `gc()` are unchanged.
+
+* **The `BPPARAM` argument has been removed from `tm_calculate()`,
+  `tm_nn()`, `tm_gc()` and `tm_wallace()`, and `BiocParallel` is no longer
+  imported.** With the compiled nearest-neighbor core the per-window loop is
+  a minority of a call's runtime; the rest (N filtering, coercion, result
+  assembly) runs once in the calling process and cannot be divided. Measured
+  on chr1 of GRCh38 (about 1.2 million windows), `SnowParam(5)` never beat
+  the serial run: worker start-up and shipping half a gigabyte of sequence
+  to the workers cost more than the loop they were dividing. The argument
+  therefore offered a slower path and no faster one, and it is gone rather
+  than kept as a no-op, so that calls passing it fail loudly.
+
+  Parallelism belongs outside the call, one region per worker, each a
+  serial `tm_calculate()`. That pattern needs no support from this package
+  and works with any backend; `vignette("hg38_performance_parallel")`
+  measures it with `BiocParallel` across a whole genome, which is why
+  `BiocParallel` remains in Suggests.
+
+* **`tm_nn()` now reports GC on the same definition it already used for salt
+  correction.** It previously reported `(G+C)/length` while correcting with
+  `(G+C)/(A+C+G+T)`. The two differ only when inosine is present, since `I`
+  counts in the length but is not a determinable base; sequences containing N
+  are skipped before this point and so were never affected. Tm values are
+  unchanged in all cases.
+
+## Performance
+
+* **`tm_gc()` is roughly 260× faster.** On the *E. coli* case study (23,208
+  windows of 200 bp) it fell from 51.7 s to 0.198 s, and is now faster than
+  `tm_nn()` rather than 77× slower. `tm_wallace()` receives the same fix.
+  The cause was that both looped over sequences in R calling `gc()`, which
+  split each sequence into a character vector with `seqinr::s2c()` and scanned
+  it five times, while `salt_correct()` repeated the same work.
+
+* Base counting now happens once per sequence in compiled code
+  (`cpp_base_counts()`), reading string bytes directly. `gc()`, `.gc_vec()`,
+  `tm_gc()`, `tm_wallace()`, `tm_nn()` and `salt_correct()` all share this one
+  implementation and one definition of GC; the internal `.GC_fast()`, which
+  carried a second definition, has been removed.
+
+* **Fewer S4 operations per call.** Profiling a 100-sequence `tm_nn()` call
+  found `validObject()`, `updateObject()` and method dispatch accounting for
+  most of the run time, against about 2% in the compiled core. Three sources
+  were removed: the two `GRanges` subsets used to drop N-containing regions
+  are now taken only when something is actually dropped; the `GC` and `Tm`
+  metadata columns are written in a single `mcols<-` assignment instead of
+  two `$<-` calls, each of which replaced and revalidated the whole metadata
+  table; and the metadata table is extracted once and reused. `tm_gc()`
+  receives the same treatment for its two column writes.
+
+  This is a fixed saving per call rather than per sequence, so it does not
+  change genome-scale timings. It matters when the functions are called
+  repeatedly on short sequences. Results are unchanged.
+
+  Measured on a 100-sequence input of 25 bp oligonucleotides, the two changes
+  in this section together reduced the cost of one `tm_calculate()` call from
+  25.1 ms to 11.6 ms, a factor of 2.2 (`BPPARAM` default 25.1 -> 21.4 ms; the
+  S4 reductions 21.4 -> 11.6 ms). Profiling after the change shows no single
+  remaining hotspot: the residual cost is S4 method dispatch distributed
+  across the Biostrings, S4Vectors and GenomicRanges accessors, and removing
+  it would require keeping the hot path out of S4 entirely.
+
+## Dependencies
+
+* **`seqinr` is no longer required.** It was used for `s2c()`/`c2s()` in
+  `gc()`, `tm_gc()`, `tm_wallace()`, `salt_correct()` and
+  `generate_complement()`, and for `read.fasta()` in `fa_to_genomic_ranges()`.
+  The first group is replaced by the compiled base counter, the second by
+  `Biostrings::readBStringSet()`, and `generate_complement()` now uses base R
+  `chartr()`. `readBStringSet()` rather than `readDNAStringSet()` is used
+  deliberately, since the latter validates against the DNA alphabet and would
+  reject the RNA input this package supports. FASTA parsing behaviour is
+  unchanged: no alphabet restriction, case preserved, sequences named by the
+  first word of the header.
+
+* **`BiocParallel` moved from Imports to Suggests.** It was used only by the
+  within-call `BPPARAM` path removed above (see Breaking changes); the
+  parallel vignette and the benchmark scripts still use it.
+
+* **`BSgenome` moved from Imports to Suggests, cutting load time by about
+  two thirds.** Attaching it pulls in rtracklayer, Rsamtools,
+  GenomicAlignments and their dependencies: measured on its own it took 7.2 s
+  to load, against 6.5 s for all of TmCalculator and roughly 2 s for the rest
+  of the Bioconductor packages combined. Every user paid that whether or not
+  they touched a genome.
+
+  Almost nothing used it. `available.genomes` was imported and never called.
+  `organism()` and `provider()` are reached only in the second fallback of
+  `.resolve_pkg_name()`, when a `BSgenome` object carries no `Package`
+  metadata and has a class name shorter than six characters, and they are now
+  guarded by `requireNamespace()`. Sequence extraction goes through
+  `Biostrings::getSeq()`, whose method for `BSgenome` objects is registered
+  when the genome package itself is loaded, which
+  `coor_to_genomic_ranges()` already does on demand.
+
+  Genome-wide workflows are unaffected: a genome package such as
+  `BSgenome.Ecoli.NCBI.ASM584v2` depends on BSgenome, so it is present
+  whenever it is needed.
+
+* `rlang` removed from Suggests; it was referenced nowhere.
+
+* `BSgenome.Hsapiens.UCSC.hg38` removed from Suggests. Its examples are inside
+  `\dontrun{}` and the hg38 vignette sets `eval = FALSE`, so `R CMD check`
+  never loads it, but listing it obliged every check environment to download
+  roughly 850 MB. The requirement is still stated in the vignette text.
 
 ## Bug fixes
 
-* Corrected two entropy values in `DNA_NN_SantaLucia_2004`. The `TA/AT` step
-  was `-20.4` (duplicated from the adjacent `AT/TA` row) and should be `-21.3`;
-  the `GG/CC` step was `-19.0` and should be `-19.9`. Both values are shared
-  with `DNA_NN_Allawi_1998`, which already carried them correctly, so the two
-  tables were internally inconsistent. Tm values computed with
-  `DNA_NN_SantaLucia_2004` will change slightly for sequences containing these
-  steps.
+* `gc()` given a character vector of length > 1 treated the elements as
+  individual bases, so passing several complete sequences silently returned a
+  value computed from the wrong thing. Such input is now concatenated into one
+  sequence, consistent with the documented `gc(c("a","t","g","c"))` form.
 
-## New parameter sets
+## Known issues
 
-* Added 19 nearest-neighbor parameter sets derived by melting-temperature
-  optimization (Weber and colleagues, UFMG), bringing the total from 8 to 27.
-  Unlike the existing sets, these are fitted directly at a stated sodium
-  concentration and are intended to replace salt correction rather than be
-  corrected.
+* `tm_nn()` skips windows containing N and warns, whereas `tm_gc()` and
+  `tm_wallace()` retain them and compute GC over the remaining bases, so
+  changing method can change which windows are returned rather than only their
+  values. See `ROADMAP.md` item 7(c); this is unchanged in this release.
 
-  - DNA: `DNA_NN_Weber_2015` (1020 mM) and a salt series
-    `DNA_NN_Weber_OW04_69`, `_119`, `_220`, `_621`, `_1020`.
-  - RNA: `RNA_NN_Weber_VIF_*` and `RNA_NN_Weber_FIF_*` at 71, 121, 221, 621
-    and 1021 mM. The VIF (variable initiation factor) sets gave better
-    cross-validation in the source study.
-  - RNA/DNA hybrid: `RNA_DNA_NN_Weber_2019_FT` and `_VH` (1000 mM) and
-    `RNA_DNA_NN_Weber_2019_LS` (100 mM).
-
-  Values were taken from the parameter files distributed with VarGibbs 5.0 at
-  full precision rather than transcribed from the published tables. The
-  transcription was validated by confirming that the reference files shipped
-  alongside them reproduce the existing `DNA_NN_Allawi_1998`,
-  `DNA_NN_Sugimoto_1996`, `RNA_NN_Xia_1998`, `RNA_NN_Freier_1986` and all 87
-  rows of `DNA_IMM_Peyret_1999` exactly.
-
-## Salt handling
-
-* Parameter sets now carry a `salt_mM` attribute when they were fitted at a
-  specific sodium concentration. `tm_nn()` uses it to avoid double-counting the
-  ionic contribution:
-
-  - if the requested `Na` matches the concentration the set was fitted at,
-    salt correction is skipped;
-  - if it does not, the correction is applied and a warning names both
-    concentrations.
-
-  Existing parameter sets carry no such attribute, so this is a no-op for all
-  previous usage.
-
-* `salt_method` gains a `"none"` option to disable salt correction explicitly.
-  The documentation previously stated that `NA` would do this, but
-  `match.arg()` rejected it.
-
-* `tm_nn()` and `tm_calculate()` now report `Salt correction applied` (logical)
-  and `Parameter set fitted at [Na+] (mM)` in the returned `options`, so the
-  automatic skip is visible rather than silent.
-
-## Documentation
-
-* `tm_nn()` gained a `@return` section; the return value was previously
-  undocumented.
-* Removed `"SantaLucia1998-2"` from the documented `salt_method` options in
-  `tm_nn()` and `tm_calculate()`. It was listed in the help pages but absent
-  from the function's accepted values, so following the documentation produced
-  an error.
-* Added a "Choosing a parameter set" section to `?tm_nn` and a "Salt handling"
-  section to `?tm_calculate`.
-* `@details` for `tm_calculate()` now explains when each of the three methods
-  is appropriate, including the note that nearest-neighbor parameters are
-  calibrated on short duplexes, so values computed over long sequences or
-  fixed-width genomic windows are best read as a relative measure of local
-  thermodynamic stability rather than as an absolute experimental Tm.
-* `tm_nn()` and `tm_calculate()` now cross-reference each other via `@seealso`.
+* With `mismatch = TRUE`, `tm_gc()` evaluates `sequence %in% "X"`, which is
+  true only when an entire sequence is the single character `"X"`, so the
+  mismatch penalty is inert. Preserved verbatim during the performance work so
+  that no value changed; see `ROADMAP.md` item 4.

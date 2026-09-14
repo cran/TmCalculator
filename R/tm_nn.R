@@ -10,15 +10,20 @@
 #' @section Choosing a parameter set:
 #' Parameter sets fall into two families that are handled differently.
 #'
-#' \strong{Reference-salt sets} (Breslauer 1986, Sugimoto 1996, Allawi 1998,
-#' SantaLucia 2004, Freier 1986, Xia 1998, Chen 2012, Sugimoto 1995) were fitted
-#' at a single reference sodium concentration, and other conditions are reached
-#' by applying one of the \code{salt_method} correction formulas.
+#' The two families are distinguished by one mechanical criterion: a set is
+#' condition-specific if and only if it carries a \code{salt_mM} attribute.
 #'
-#' \strong{Condition-specific sets} (the Weber/VarGibbs series) were instead
+#' \strong{Reference-salt sets} (no \code{salt_mM}; Breslauer 1986,
+#' Sugimoto 1996, Allawi 1998, SantaLucia 2004, Freier 1986, Xia 1998,
+#' Chen 2012, Zuber 2022, Sugimoto 1995) were fitted at a single reference
+#' sodium concentration, and other conditions are reached by applying one of
+#' the \code{salt_method} correction formulas.
+#'
+#' \strong{Condition-specific sets} (the Weber/VarGibbs series, Banerjee 2020,
+#' and the molecular-crowding sets of Ghosh 2020 and Ghosh 2023) were instead
 #' fitted directly at a stated sodium concentration and are intended to
-#' \emph{replace} salt correction rather than be corrected. Each carries a
-#' \code{salt_mM} attribute. When the requested \code{Na} matches that value,
+#' \emph{replace} salt correction rather than be corrected. When the requested
+#' \code{Na} matches the set's \code{salt_mM} value,
 #' salt correction is skipped automatically; when it does not, the correction is
 #' still applied but a warning is issued, since correcting an already
 #' condition-specific set double-counts the ionic effect. Whether a correction
@@ -57,7 +62,7 @@
 #'   - Specific alignment positions are needed
 #' 
 #' @param nn_table Thermodynamic nearest-neighbor parameters for different nucleic acid hybridizations.
-#'   Twenty-seven parameter sets are available, organized by hybridization type.
+#'   Parameter sets are listed below by hybridization type.
 #'   Sets marked with a sodium concentration were fitted at that condition and
 #'   are not salt-corrected further (see the "Choosing a parameter set" section).
 #'
@@ -73,10 +78,20 @@
 #'   - "DNA_NN_Weber_OW04_69", "...119", "...220", "...621", "...1020":
 #'     fitted independently at 69, 119, 220, 621 and 1020 mM sodium
 #'
+#'   DNA/DNA under molecular crowding (cell-like rather than dilute solution):
+#'   - "DNA_NN_Ghosh_2020_PEG200": fitted in 40 wt% PEG200 with 100 mM NaCl
+#'
 #'   RNA/RNA hybridizations, reference salt:
 #'   - "RNA_NN_Freier_1986": Original RNA/RNA parameters
 #'   - "RNA_NN_Xia_1998": Improved RNA/RNA parameters
 #'   - "RNA_NN_Chen_2012": Updated RNA/RNA parameters with GU pair corrections
+#'   - "RNA_NN_Zuber_2022": Successor to Xia 1998 with improved end effects.
+#'     The terminal-AU penalty is replaced by end terms that depend on the
+#'     penultimate base pair, applied automatically from a companion table
+#'
+#'   RNA/RNA under molecular crowding (cell-like rather than dilute solution):
+#'   - "RNA_NN_Ghosh_2023_PEG200": fitted in 40 wt% PEG200 with 100 mM NaCl,
+#'     and shown to describe duplexes in an intracellular cation composition
 #'
 #'   RNA/RNA hybridizations, salt-optimized (Ferreira 2019). VIF (variable
 #'   initiation factors) gave better cross-validation than FIF (fixed):
@@ -89,7 +104,38 @@
 #'     performing high-salt hybrid set in Basilio Barbosa (2019)
 #'   - "RNA_DNA_NN_Weber_2019_VH": van't Hoff derived, 1000 mM
 #'   - "RNA_DNA_NN_Weber_2019_LS": low salt, 100 mM
+#'   - "RNA_DNA_NN_Banerjee_2020": improved hybrid parameters fitted at a
+#'     physiological condition (100 mM NaCl), Banerjee et al. (2020)
 #' 
+#'
+#'   Alternatively, supply a matrix or data.frame of parameters directly. This
+#'   is the route for parameter sets the package does not ship, in particular
+#'   sets covering modified bases such as 5-methylcytosine. Requirements:
+#'   \itemize{
+#'     \item numeric, with columns 1 and 2 read as delta H (kcal/mol) and
+#'       delta S (cal/mol/K); further columns are ignored;
+#'     \item row names giving the parameter keys, e.g. \code{"AA/TT"},
+#'       \code{"init"}, \code{"init_A/T"}, \code{"sym"};
+#'     \item every key of a built-in reference set must be present. The
+#'       reference is named by \code{attr(x, "reference")}, or defaults to
+#'       the first built-in listed for the argument, which is a DNA/DNA set;
+#'       RNA and hybrid tables should therefore set the attribute. Extra keys
+#'       beyond the reference are kept, which is how a modified-base set adds
+#'       stacks rather than replacing them.
+#'   }
+#'   The supplied table is reordered to the reference key order before use, so
+#'   that two tables differing only in row order give identical results. A
+#'   missing key would otherwise contribute zero to the calculation instead of
+#'   raising an error, which is why the full key set is required. Keys that
+#'   disagree with their reverse complement produce a warning: expected for
+#'   modified bases, a transposition error otherwise.
+#'
+#'   Two optional attributes are honoured. \code{attr(x, "salt_mM")} marks a
+#'   set as fitted at a stated sodium concentration, which suppresses the salt
+#'   correction at that concentration exactly as for the built-in sets fitted
+#'   this way; without it the table is treated as a reference-condition set and
+#'   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
+#'   companion penultimate-pair end-effect table.
 #' @param tmm_table Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_Bommarito_2000"
 #'   These parameters account for mismatches at the ends of the duplex.
 #' 
@@ -131,7 +177,8 @@
 #'   - "Owczarzy2008": Updated comprehensive salt correction
 #'   - "none": Disables salt correction entirely
 #'   Note: Parameter sets fitted at a specific sodium concentration (those
-#'   carrying a "salt_mM" attribute, i.e. the Weber/VarGibbs series) already
+#'   carrying a "salt_mM" attribute, e.g. the Weber/VarGibbs series and
+#'   Banerjee 2020) already
 #'   account for salt. When the requested \code{Na} matches the concentration
 #'   such a set was fitted at, salt correction is skipped automatically; when
 #'   it does not, a warning is issued.
@@ -151,8 +198,8 @@
 #' @param formamide_factor Coefficient of melting temperature (Tm) decrease per percent formamide.
 #'   Default: 0.65
 #'   Literature reports values ranging from 0.6 to 0.72
-#' 
-#' @details 
+#'
+#' @details
 #' 
 #'  DNA_NN_Breslauer_1986: Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>
 #'  
@@ -193,6 +240,14 @@
 #'  RNA_DNA_NN_Weber_2019_FT (1000 mM), RNA_DNA_NN_Weber_2019_VH (1000 mM),
 #'  RNA_DNA_NN_Weber_2019_LS (100 mM): Basilio Barbosa V (2019) <doi:10.1016/j.bpc.2019.106189>
 #'
+#'  RNA_DNA_NN_Banerjee_2020 (100 mM): Banerjee D (2020) <doi:10.1093/nar/gkaa572>
+#'
+#'  RNA_NN_Zuber_2022: Zuber J (2022) <doi:10.1093/nar/gkac261>
+#'
+#'  RNA_NN_Ghosh_2023_PEG200 (100 mM, 40 wt% PEG200): Ghosh S (2023) <doi:10.1093/nar/gkad020>
+#'
+#'  DNA_NN_Ghosh_2020_PEG200 (100 mM, 40 wt% PEG200): Ghosh S (2020) <doi:10.1073/pnas.1920886117>
+#'
 #'  DNA_TMM_Bommarito_2000: Bommarito S (2000)  <doi:10.1093/nar/28.9.1929>
 #'  
 #'  DNA_IMM_Peyret_1999: Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>
@@ -225,6 +280,20 @@
 #' 
 #' Allawi H, SantaLucia J: Thermodynamics and NMR of internal G-T mismatches in DNA. Biochemistry 1997, 36:10581-10594.
 #' 
+#' Weber G. Optimization method for obtaining nearest-neighbour DNA entropies and enthalpies directly from melting temperatures. Bioinformatics, 2015, 31(6):871-877.
+#' 
+#' Ferreira I, Jolley E A, Znosko B M, Weber G. Replacing salt correction factors with optimized RNA nearest-neighbour enthalpy and entropy parameters. Chemical Physics, 2019, 521:69-76.
+#' 
+#' Basilio Barbosa V, de Oliveira Martins E, Weber G. Nearest-neighbour parameters optimized for melting temperature prediction of DNA/RNA hybrids at high and low salt concentrations. Biophysical Chemistry, 2019, 251:106189.
+#' 
+#' Banerjee D, Tateishi-Karimata H, Ohyama T, et al. Improved nearest-neighbor parameters for the stability of RNA/DNA hybrids under a physiological condition. Nucleic Acids Research, 2020, 48(21):12042-12054.
+#' 
+#' Zuber J, Schroeder S J, Sun H, Turner D H, Mathews D H. Nearest neighbor rules for RNA helix folding thermodynamics: improved end effects. Nucleic Acids Research, 2022, 50(9):5251-5262.
+#' 
+#' Ghosh S, Takahashi S, Ohyama T, et al. Nearest-neighbor parameters for predicting DNA duplex stability in diverse molecular crowding conditions. Proceedings of the National Academy of Sciences, 2020, 117(25):14194-14201.
+#' 
+#' Ghosh S, Takahashi S, Banerjee D, et al. Nearest-neighbor parameters for the prediction of RNA duplex stability in diverse in vitro and cellular-like crowding conditions. Nucleic Acids Research, 2023, 51(9):4101-4111.
+#' 
 #' Santalucia N E W J . Nearest-neighbor thermodynamics of deoxyinosine pairs in DNA duplexes[J]. Nucleic Acids Research, 2005, 33(19):6258-67.
 #' 
 #' Peyret N , Seneviratne P A , Allawi H T , et al. Nearest-Neighbor Thermodynamics and NMR of DNA Sequences with Internal A-A, C-C, G-G, and T-T Mismatches, [J]. Biochemistry, 1999, 38(12):3468-3477.
@@ -234,6 +303,14 @@
 #' Ferreira I, Jolley E A, Znosko B M, et al. Replacing salt correction factors with optimized RNA nearest-neighbour enthalpy and entropy parameters[J]. Chemical Physics, 2019, 521:69-76.
 #'
 #' Basilio Barbosa V, de Oliveira Martins E, Weber G. Nearest-neighbour parameters optimized for melting temperature prediction of DNA/RNA hybrids at high and low salt concentrations[J]. Biophysical Chemistry, 2019, 251:106189.
+#'
+#' Banerjee D, Tateishi-Karimata H, Ohyama T, Ghosh S, Endoh T, Takahashi S, Sugimoto N. Improved nearest-neighbor parameters for the stability of RNA/DNA hybrids under a physiological condition[J]. Nucleic Acids Research, 2020, 48(21):12042-12054.
+#'
+#' Zuber J, Schroeder S J, Sun H, Turner D H, Mathews D H. Nearest neighbor rules for RNA helix folding thermodynamics: improved end effects[J]. Nucleic Acids Research, 2022, 50(9):5251-5262.
+#'
+#' Ghosh S, Takahashi S, Banerjee D, Ohyama T, Endoh T, Tateishi-Karimata H, Sugimoto N. Nearest-neighbor parameters for the prediction of RNA duplex stability in diverse in vitro and cellular-like crowding conditions[J]. Nucleic Acids Research, 2023, 51(9):4101-4111.
+#'
+#' Ghosh S, Takahashi S, Ohyama T, Endoh T, Tateishi-Karimata H, Sugimoto N. Nearest-neighbor parameters for predicting DNA duplex stability in diverse molecular crowding conditions[J]. Proceedings of the National Academy of Sciences, 2020, 117(25):14194-14201.
 #'
 #' @return A \code{TmCalculator} list with:
 #'   \item{\code{gr}}{The input \code{GRanges} with metadata columns \code{Tm}
@@ -265,6 +342,42 @@
 #' # skipped automatically rather than applied on top of it.
 #' out_ls <- tm_nn(seqs, nn_table = "RNA_DNA_NN_Weber_2019_LS", Na = 100)
 #' out_ls$options[["Salt correction applied"]]
+#'
+#' # -- A parameter table supplied by the user --------------------------------
+#' # Any of nn_table, tmm_table, imm_table and de_table also accepts a matrix,
+#' # which is how a set the package does not ship, most obviously one covering
+#' # modified bases, is used without waiting for a new release.
+#' #
+#' # Start from a built-in set to get the required keys, then add a stack. The
+#' # key naming follows the built-in convention: top strand, "/", bottom
+#' # strand, so "MG/CG" would be a 5-methylcytosine followed by G, paired with
+#' # CG. The values here are illustrative and are NOT measured parameters.
+#' tbl <- TmCalculator:::get_table("DNA_NN_SantaLucia_2004")
+#' tbl <- rbind(tbl, "MG/CG" = c(-9.1, -24.0))
+#'
+#' # Optional attributes. "reference" names the built-in whose key set must be
+#' # present, which matters for RNA and hybrid tables because the default
+#' # reference is a DNA/DNA set. "salt_mM" marks the table as fitted at a
+#' # stated sodium concentration, so that it suppresses the salt correction at
+#' # that concentration exactly as the built-in condition-specific sets do.
+#' attr(tbl, "reference") <- "DNA_NN_SantaLucia_2004"
+#'
+#' out_user <- tm_nn(seqs, nn_table = tbl, Na = 50)
+#' out_user$options[["Thermodynamic NN values"]]
+#' # "user-supplied (reference: DNA_NN_SantaLucia_2004)"
+#'
+#' # Passing a built-in table back in through this route changes nothing: the
+#' # supplied table is reordered to the reference key order before use, so row
+#' # order carries no information.
+#' identical(tm_nn(seqs, nn_table = "DNA_NN_SantaLucia_2004")$gr$Tm,
+#'           tm_nn(seqs,
+#'                 nn_table = TmCalculator:::get_table("DNA_NN_SantaLucia_2004")
+#'                 )$gr$Tm)
+#'
+#' # A table missing a key is refused rather than tolerated. The compiled core
+#' # resolves each stack by name, so an absent key would contribute zero
+#' # enthalpy and entropy to every sequence containing that step, silently.
+#' try(tm_nn(seqs, nn_table = tbl[setdiff(rownames(tbl), "AA/TT"), ]))
 #' out_ls$options[["Parameter set fitted at [Na+] (mM)"]]
 #'
 #' @export tm_nn
@@ -273,12 +386,15 @@ tm_nn <- function(gr_seq,
                   ambiguous     = FALSE,
                   shift         = 0,
                   nn_table      = c("DNA_NN_SantaLucia_2004",
+                                     "DNA_NN_Ghosh_2020_PEG200",
                                      "DNA_NN_Breslauer_1986",
                                      "DNA_NN_Sugimoto_1996",
                                      "DNA_NN_Allawi_1998",
                                      "RNA_NN_Freier_1986",
                                      "RNA_NN_Xia_1998",
                                      "RNA_NN_Chen_2012",
+                                     "RNA_NN_Zuber_2022",
+                                     "RNA_NN_Ghosh_2023_PEG200",
                                      "RNA_DNA_NN_Sugimoto_1995",
                                      "DNA_NN_Weber_2015",
                                      "DNA_NN_Weber_OW04_69",
@@ -298,7 +414,8 @@ tm_nn <- function(gr_seq,
                                      "RNA_NN_Weber_FIF_1021",
                                      "RNA_DNA_NN_Weber_2019_FT",
                                      "RNA_DNA_NN_Weber_2019_VH",
-                                     "RNA_DNA_NN_Weber_2019_LS"),
+                                     "RNA_DNA_NN_Weber_2019_LS",
+                                     "RNA_DNA_NN_Banerjee_2020"),
                   tmm_table      = "DNA_TMM_Bommarito_2000",
                   imm_table      = "DNA_IMM_Peyret_1999",
                   de_table       = c("DNA_DE_Bommarito_2000",
@@ -324,19 +441,31 @@ tm_nn <- function(gr_seq,
                   formamide_factor     = 0.65) {
 
   # -- Validate args once ----------------------------------------------------
-  nn_table <- match.arg(nn_table)
-  tmm_table <- match.arg(tmm_table)
-  imm_table <- match.arg(imm_table)
-  de_table <- match.arg(de_table)
+  # Each table argument is either a built-in name or a user-supplied matrix.
+  # .resolve_table() applies match.arg() on the first path and validates,
+  # canonicalises the row order of, and returns the second; see its definition
+  # for why the key set is enforced rather than trusted.
+  .nn  <- .resolve_table(nn_table,  "nn_table",  eval(formals(tm_nn)$nn_table))
+  .tmm <- .resolve_table(tmm_table, "tmm_table", eval(formals(tm_nn)$tmm_table))
+  .imm <- .resolve_table(imm_table, "imm_table", eval(formals(tm_nn)$imm_table))
+  .de  <- .resolve_table(de_table,  "de_table",  eval(formals(tm_nn)$de_table))
   salt_method <- match.arg(salt_method)
 
-  # -- Load tables once (from package sysdata or .TM_CONSTANTS) -------------
-  # In the final package, replace with: tbl <- .TM_CONSTANTS$NN[[nn_table]]
-  # For now, build once in this call (still 100x faster than per-sequence):
-  nn_tbl <- get_table(nn_table)   # internal helper (see below)
-  tmm_tbl <- get_table(tmm_table)
-  imm_tbl <- get_table(imm_table)
-  de_tbl <- get_table(de_table)
+  nn_tbl  <- .nn$tbl
+  tmm_tbl <- .tmm$tbl
+  imm_tbl <- .imm$tbl
+  de_tbl  <- .de$tbl
+
+  # Companion end-effect table, if the selected parameter set ships one
+  # (currently only Zuber 2022). Empty matrix otherwise, which leaves the
+  # calculation identical to previous releases. A user table has no name to
+  # look up, so it carries its own end table as an attribute if it needs one.
+  end_tbl <- if (.nn$user) {
+    e <- attr(nn_tbl, "end_table")
+    if (is.null(e)) matrix(numeric(0), nrow = 0, ncol = 2,
+                           dimnames = list(NULL, c("left", "right")))
+    else as.matrix(e)
+  } else get_end_table(.nn$name)
 
   # -- Salt-correction guard -------------------------------------------------
   # Some parameter sets (the Weber/VarGibbs series) are fitted AT a specific
@@ -352,7 +481,7 @@ tm_nn <- function(gr_seq,
       # Already fitted at this salt: skip correction silently.
       salt_fn_eff <- NULL
     } else {
-      warning("Parameter set '", nn_table, "' was fitted at ", tbl_salt,
+      warning("Parameter set '", .nn$name, "' was fitted at ", tbl_salt,
               " mM [Na+], but Na = ", Na, " mM was requested. The '",
               salt_method, "' correction is being applied on top of a ",
               "condition-specific parameter set, which is approximate. ",
@@ -361,63 +490,58 @@ tm_nn <- function(gr_seq,
     }
   }
 
-  # Process sequence with pairwise N filtering
-  region_ids <- names(gr_seq)
-  if (is.null(region_ids)) {
-    region_ids <- rep("", length(gr_seq))
-  }
-  empty_id <- is.na(region_ids) | region_ids == ""
-  if (any(empty_id)) {
-    region_ids[empty_id] <- paste0(
-      as.character(GenomicRanges::seqnames(gr_seq))[empty_id], ":",
-      GenomicRanges::start(gr_seq)[empty_id], "-",
-      GenomicRanges::end(gr_seq)[empty_id]
+  # -- Pairwise N filtering (fast path; the per-base cleaning that used to
+  # -- happen here now runs inside the C++ core, on the workers) -------------
+  # Subsetting a GRanges is an S4 operation that rebuilds and revalidates the
+  # object. Profiling a 100-sequence call found validObject/updateObject and
+  # method dispatch accounting for most of the run time, against about 2% in
+  # the compiled core, so both subsets are now taken only when something is
+  # actually dropped -- which is the uncommon case, since most inputs contain
+  # no N at all.
+  mc0 <- GenomicRanges::mcols(gr_seq)
+  has_n <- .col_has_n(mc0$sequence) | .col_has_n(mc0$complement)
+  if (any(has_n)) {
+    warning(
+      sprintf(
+        "Skipped %d region(s) because sequence or complement contains 'N'. See your_output$options$'Skipped regions containing N' for details",
+        sum(has_n)
+      ),
+      call. = FALSE
     )
+    gr_seq_dropoff <- gr_seq[has_n]
+    gr_seq         <- gr_seq[!has_n]
+  } else {
+    gr_seq_dropoff <- gr_seq[0L]
   }
-  
-  filtered_seq <- check_filter_seq(
-    list(
-      sequence = gr_seq$sequence,
-      complement = gr_seq$complement,
-      region_ids = region_ids
-    ),
-    method = "tm_nn"
-  )
-  
-  gr_seq_dropoff <- gr_seq[!filtered_seq$kept]
-  gr_seq <- gr_seq[filtered_seq$kept]
-  gr_seq$sequence <- filtered_seq$sequence
-  gr_seq$complement <- filtered_seq$complement
-  
-  # -- Process all sequences -------------------------------------------------
-  n   <- length(gr_seq)
-  tm  <- numeric(n)
-  gc <- numeric(n)
+  if (length(gr_seq) == 0) {
+    stop("No valid regions left for tm_nn calculation after filtering sequences with 'N'.")
+  }
 
-  all_seqs  <- as.character(mcols(gr_seq)$sequence)
-  all_cseqs <- as.character(mcols(gr_seq)$complement)
-  
-  for (i in seq_len(n)) {
-    seq_str  <- all_seqs[i]
-    cseq_str <- all_cseqs[i]
-    
-    if (nchar(seq_str) < 2L ) {
-      tm[i] <- NA_real_
-      gc[i] <- NA_real_
-      next
-    }
-    result <- tryCatch(
-      .tm_nn_core(seq_str, cseq_str, ambiguous, shift, nn_tbl=nn_tbl, tmm_tbl=tmm_tbl, imm_tbl=imm_tbl, de_tbl=de_tbl, dnac_high, dnac_low, self_comp,
-                  Na, K, Tris, Mg, dNTPs, salt_fn=salt_fn_eff, DMSO, dmso_factor, formamide_factor, formamide_unit),
-      error = function(e) NA_real_
-    )
-    tm[i] <- result$Tm
-    gc[i] <- result$GC
-  }
-  if (!"GC" %in% names(GenomicRanges::mcols(gr_seq))) {
-    gr_seq$GC <- gc
-  }
-  gr_seq$Tm <- tm
+  # -- Process all sequences in one compiled pass ----------------------------
+  # Reuse the mcols already extracted above when the object was not subset.
+  # The columns may be a DNAStringSet; they are coerced to character once
+  # here, which is what the C++ core takes.
+  mc <- if (any(has_n)) GenomicRanges::mcols(gr_seq) else mc0
+
+  chunk_res <- .tm_nn_chunk(
+    list(sequence = as.character(mc$sequence),
+         complement = as.character(mc$complement)),
+    ambiguous = ambiguous, shift = shift,
+    nn_tbl = nn_tbl, tmm_tbl = tmm_tbl, imm_tbl = imm_tbl, de_tbl = de_tbl,
+    end_tbl = end_tbl,
+    dnac_high = dnac_high, dnac_low = dnac_low, self_comp = self_comp,
+    Na = Na, K = K, Tris = Tris, Mg = Mg, dNTPs = dNTPs,
+    salt_fn = salt_fn_eff, DMSO = DMSO, dmso_factor = dmso_factor,
+    formamide_factor = formamide_factor, formamide_unit = formamide_unit
+  )
+  tm <- chunk_res$Tm
+  gc <- chunk_res$GC
+  # One mcols<- assignment rather than two `$<-`: each `$<-` replaces the
+  # whole metadata DataFrame and revalidates the GRanges.
+  mc_out <- GenomicRanges::mcols(gr_seq)
+  if (!"GC" %in% names(mc_out)) mc_out$GC <- gc
+  mc_out$Tm <- tm
+  GenomicRanges::mcols(gr_seq) <- mc_out
   
   nn_table_list <- list("DNA_NN_Breslauer_1986" = "Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>",
                         "DNA_NN_Sugimoto_1996" = "Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>",
@@ -449,7 +573,11 @@ tm_nn <- function(gr_seq,
                         "RNA_NN_Weber_FIF_1021" = "Ferreira I (2019) <doi:10.1016/j.chemphys.2019.01.016>, FIF, 1021 mM [Na+]",
                         "RNA_DNA_NN_Weber_2019_FT" = "Basilio Barbosa V (2019) <doi:10.1016/j.bpc.2019.106189>, curve fitting, 1000 mM [Na+]",
                         "RNA_DNA_NN_Weber_2019_VH" = "Basilio Barbosa V (2019) <doi:10.1016/j.bpc.2019.106189>, van't Hoff, 1000 mM [Na+]",
-                        "RNA_DNA_NN_Weber_2019_LS" = "Basilio Barbosa V (2019) <doi:10.1016/j.bpc.2019.106189>, low salt, 100 mM [Na+]")
+                        "RNA_DNA_NN_Weber_2019_LS" = "Basilio Barbosa V (2019) <doi:10.1016/j.bpc.2019.106189>, low salt, 100 mM [Na+]",
+                        "RNA_DNA_NN_Banerjee_2020" = "Banerjee D (2020) <doi:10.1093/nar/gkaa572>, physiological condition, 100 mM [Na+]",
+                        "RNA_NN_Zuber_2022" = "Zuber J (2022) <doi:10.1093/nar/gkac261>, improved end effects",
+                        "RNA_NN_Ghosh_2023_PEG200" = "Ghosh S (2023) <doi:10.1093/nar/gkad020>, 40 wt% PEG200 crowding, 100 mM [Na+]",
+                        "DNA_NN_Ghosh_2020_PEG200" = "Ghosh S (2020) <doi:10.1073/pnas.1920886117>, 40 wt% PEG200 crowding, 100 mM [Na+]")
   
   # Create result list with proper structure
   
@@ -459,10 +587,10 @@ tm_nn <- function(gr_seq,
     gr = gr_seq,
     options = list("Ambiguous" = ambiguous,
                    "Shift" = shift,
-                   "Thermodynamic NN values" = paste0(nn_table, ": ", nn_table_list[[nn_table]]), 
-                   "Thermodynamic values for terminal mismatches" = paste0(tmm_table,": ",nn_table_list[[tmm_table]]), 
-                   "Thermodynamic values for internal mismatches" = paste0(imm_table,": ",nn_table_list[[imm_table]]),
-                   "Thermodynamic values for dangling ends" = paste0(de_table,": ",nn_table_list[[de_table]]), 
+                   "Thermodynamic NN values" = .tbl_label(.nn, nn_table_list),
+                   "Thermodynamic values for terminal mismatches" = .tbl_label(.tmm, nn_table_list),
+                   "Thermodynamic values for internal mismatches" = .tbl_label(.imm, nn_table_list),
+                   "Thermodynamic values for dangling ends" = .tbl_label(.de, nn_table_list),
                    "Concentration of the higher concentrated strand" = dnac_high,
                    "Concentration of the lower concentrated strand" = dnac_low, 
                    "Sequence self-complementary" = self_comp, 
@@ -489,10 +617,153 @@ tm_nn <- function(gr_seq,
   return(result_list)
 }
 
+# -- Fast per-column N detection ----------------------------------------------
+# vcountPattern works directly on XStringSet without character coercion.
+#' @keywords internal
+.col_has_n <- function(x) {
+  if (inherits(x, "XStringSet")) {
+    Biostrings::vcountPattern("N", x) > 0
+  } else {
+    grepl("N", toupper(as.character(x)), fixed = FALSE)
+  }
+}
+
+# -- Table -> C++ handoff -----------------------------------------------------
+#' @keywords internal
+.tbl_to_cpp <- function(tbl) {
+  keys <- rownames(tbl)
+  # A zero-row table (e.g. the end table of a set without end effects) has
+  # NULL rownames; hand C++ a zero-length character vector instead of NULL.
+  if (is.null(keys)) keys <- character(0)
+  list(keys = keys,
+       dh = as.numeric(tbl[, 1]),
+       ds = as.numeric(tbl[, 2]))
+}
+
+# -- NN Tm/GC over a block of sequences (Rcpp-backed) -------------------------
+# `chunk` is list(sequence=, complement=) for the whole input.
+#
+# The C++ core (src/tm_nn_core.cpp) uppercases each sequence, strips
+# characters outside A/C/G/T/I (the former check_filter_seq step, now on the
+# workers), accumulates delta_H/delta_S and base counts; the two-state Tm
+# formula plus salt and chemical corrections are applied here, vectorized.
+# After cleaning, sequences contain only A/C/G/T/I, so the `ambiguous` flag
+# cannot change GC values on this path.
+#' @keywords internal
+.tm_nn_chunk <- function(chunk, ambiguous, shift, nn_tbl, tmm_tbl, imm_tbl,
+                         de_tbl, end_tbl, dnac_high, dnac_low, self_comp,
+                         Na, K, Tris, Mg, dNTPs, salt_fn,
+                         DMSO, dmso_factor, formamide_factor, formamide_unit) {
+  self_comp_eff <- isTRUE(self_comp) && ("sym" %in% rownames(nn_tbl))
+
+  res <- cpp_tm_nn_dhds(
+    as.character(chunk$sequence), as.character(chunk$complement),
+    as.integer(shift),
+    .tbl_to_cpp(nn_tbl), .tbl_to_cpp(tmm_tbl),
+    .tbl_to_cpp(imm_tbl), .tbl_to_cpp(de_tbl),
+    self_comp_eff, .tbl_to_cpp(end_tbl)
+  )
+
+  dh  <- res[, "dh"]
+  ds  <- res[, "ds"]
+  nGC <- res[, "nG"] + res[, "nC"]
+  acgt <- res[, "nA"] + res[, "nC"] + res[, "nG"] + res[, "nT"]
+  len <- res[, "len"]
+  ok  <- res[, "ok"] > 0
+
+  # One definition of GC throughout the package: (G+C)/(A+C+G+T), i.e. gc_content()
+  # semantics. Previously this path reported (G+C)/length and salt-corrected
+  # with (G+C)/(A+C+G+T); the two diverge whenever inosine is present, since
+  # I counts in the length but is not a determinable base.
+  gc_salt <- ifelse(acgt > 0, 100 * nGC / acgt, NA_real_)
+
+  k <- if (self_comp_eff) dnac_high * 1e-9 else
+    (dnac_high - (dnac_low / 2.0)) * 1e-9
+  R <- 1.987
+
+  corr_salt <- NULL
+  if (!is.null(salt_fn) && !identical(salt_fn, "none")) {
+    corr_salt <- .salt_correct_vec(Na = Na, K = K, Tris = Tris, Mg = Mg,
+                                   dNTPs = dNTPs, method = salt_fn,
+                                   gc_pct = gc_salt, seq_len = len)
+    if (identical(salt_fn, "SantaLucia1998-2")) {
+      ds <- ds + corr_salt
+    }
+    tm <- (1000 * dh) / (ds + (R * log(k))) - 273.15
+    if (salt_fn %in% c("Schildkraut2010", "Wetmur1991",
+                       "SantaLucia1996", "SantaLucia1998-1")) {
+      tm <- tm + corr_salt
+    }
+    if (salt_fn %in% c("Owczarzy2004", "Owczarzy2008")) {
+      tm <- (1 / (1 / (tm + 273.15) + corr_salt) - 273.15)
+    }
+  } else {
+    tm <- (1000 * dh) / (ds + (R * log(k))) - 273.15
+  }
+
+  tm <- tm + .chem_correct_vec(DMSO = DMSO,
+                               formamide_unit = formamide_unit,
+                               dmso_factor = dmso_factor,
+                               formamide_factor = formamide_factor,
+                               pt_gc = gc_salt)
+
+  # Reproduce the R core's failure semantics: any sequence whose evaluation
+  # errored (short/missing init rows) or whose salt correction is undefined
+  # (e.g. Owczarzy2008 with sqrt(Mg)/mon >= 6) gets NA for BOTH Tm and GC,
+  # exactly as tryCatch() around .tm_nn_core() did.
+  bad <- !ok
+  if (!is.null(corr_salt)) {
+    bad <- bad | is.na(corr_salt)
+  }
+  tm[bad] <- NA_real_
+  gc_out <- gc_salt
+  gc_out[bad] <- NA_real_
+  list(Tm = unname(tm), GC = unname(gc_out))
+}
+
+# -- Pure-R chunk worker, kept as reference implementation --------------------
+# Used by unit tests to verify the Rcpp path reproduces the original R
+# results exactly; not called in normal operation.
+#' @keywords internal
+.tm_nn_chunk_r <- function(chunk, ambiguous, shift, nn_tbl, tmm_tbl, imm_tbl,
+                           de_tbl, end_tbl, dnac_high, dnac_low, self_comp,
+                           Na, K, Tris, Mg, dNTPs, salt_fn,
+                           DMSO, dmso_factor, formamide_factor, formamide_unit) {
+  m  <- length(chunk$sequence)
+  tm <- rep(NA_real_, m)
+  gc <- rep(NA_real_, m)
+  for (j in seq_len(m)) {
+    seq_str  <- chunk$sequence[j]
+    cseq_str <- chunk$complement[j]
+    if (is.na(seq_str) || is.na(cseq_str)) {
+      next
+    }
+    # Same cleaning as the C++ core: uppercase, keep only A/C/G/T/I
+    seq_str  <- gsub("[^ACGTI]", "", toupper(seq_str), perl = TRUE)
+    cseq_str <- gsub("[^ACGTI]", "", toupper(cseq_str), perl = TRUE)
+    if (nchar(seq_str) < 2L) {
+      next
+    }
+    result <- tryCatch(
+      .tm_nn_core(seq_str, cseq_str, ambiguous, shift, nn_tbl = nn_tbl,
+                  tmm_tbl = tmm_tbl, imm_tbl = imm_tbl, de_tbl = de_tbl,
+                  end_tbl = end_tbl,
+                  dnac_high, dnac_low, self_comp,
+                  Na, K, Tris, Mg, dNTPs, salt_fn = salt_fn,
+                  DMSO, dmso_factor, formamide_factor, formamide_unit),
+      error = function(e) list(Tm = NA_real_, GC = NA_real_)
+    )
+    tm[j] <- result$Tm
+    gc[j] <- result$GC
+  }
+  list(Tm = unname(tm), GC = unname(gc))
+}
+
 # -- Core single-sequence NN computation --------------------------------------
 # All table lookups are vectorized (no per-base loop)
 
 .tm_nn_core <- function(seq_str, cseq_str, ambiguous, shift, nn_tbl, tmm_tbl, imm_tbl, de_tbl, dnac_high, dnac_low, self_comp,
+                        end_tbl = matrix(numeric(0), nrow = 0, ncol = 2),
                         Na, K, Tris, Mg, dNTPs, salt_fn, DMSO, dmso_factor, formamide_factor, formamide_unit) {
 
 
@@ -583,6 +854,19 @@ tm_nn <- function(gr_seq,
     tmp_cseq <- substring(tmp_cseq, 1, n)
   }
   
+  # for end effects (Zuber 2022): added, terminal pair NOT consumed
+  if (nrow(end_tbl) > 0L) {
+    if (length(keys_fr) > 0L && keys_fr[1] %in% rownames(end_tbl)) {
+      delta_h <- end_tbl[keys_fr[1], 1] + delta_h
+      delta_s <- end_tbl[keys_fr[1], 2] + delta_s
+    }
+    key_e_right <- .right_key(tmp_seq, tmp_cseq, nchar(tmp_seq))
+    if (key_e_right %in% rownames(end_tbl)) {
+      delta_h <- end_tbl[key_e_right, 1] + delta_h
+      delta_s <- end_tbl[key_e_right, 2] + delta_s
+    }
+  }
+
   # for initial of nearest neighbor
   delta_h <- nn_tbl['init', 1] + delta_h
   delta_s <- nn_tbl['init', 2] + delta_s
@@ -679,7 +963,7 @@ tm_nn <- function(gr_seq,
   } else {
     tm <- (1000 * delta_h) / (delta_s + (R * (log(k)))) - 273.15
   }
-  pt_gc <- .GC_fast(seq_str, ambiguous = ambiguous)
+  pt_gc <- .gc_vec(seq_str, ambiguous = ambiguous)
   corr_chem <- chem_correct(
     DMSO = DMSO,
     formamide_unit = formamide_unit,
@@ -694,46 +978,151 @@ tm_nn <- function(gr_seq,
 # Package-private cache for thermodynamic tables (not .GlobalEnv)
 .TM_TABLE_CACHE <- new.env(parent = emptyenv())
 
+# -- Helper: companion end-effect table for a parameter set ------------------
+# Returns the "<nn_table>_END" entry when the set defines penultimate-pair
+# dependent end terms (Zuber 2022), otherwise a zero-row matrix.
+#' @keywords internal
+get_end_table <- function(table_name) {
+  end_name <- paste0(table_name, "_END")
+  if (!is.null(.TM_CONSTANTS[[end_name]])) {
+    return(get_table(end_name))
+  }
+  matrix(numeric(0), nrow = 0, ncol = 2,
+         dimnames = list(NULL, c("left", "right")))
+}
+
 # -- Helper: get table (package data or build) ------------------------------
+# -- Helper: provenance string for a resolved table --------------------------
+# A user-supplied table has no entry in the citation list, and indexing a list
+# with a name it does not contain returns NULL, which paste0() would silently
+# render as "". The recorded provenance is the only place a reader can see
+# which parameters produced a Tm, so it says "user-supplied" explicitly.
+.tbl_label <- function(res, citations) {
+  if (isTRUE(res$user)) return(res$name)
+  cit <- citations[[res$name]]
+  if (is.null(cit)) res$name else paste0(res$name, ": ", cit)
+}
+
+# -- Helper: resolve a table argument ----------------------------------------
+# A table argument is either the name of a built-in parameter set or a
+# user-supplied matrix / data.frame. The second form exists so that parameter
+# sets that the package does not ship, most obviously sets covering modified
+# bases such as 5-methylcytosine, can be used without a new release.
+#
+# A user table is validated and REORDERED against a built-in reference rather
+# than taken as given. Two reasons:
+#
+#   * The keys are the interface. The compiled core looks each dinucleotide
+#     stack up by name (.tbl_to_cpp passes rownames), so a table missing a key
+#     does not fail loudly: the lookup returns nothing and that stack silently
+#     contributes zero to dH and dS. Requiring the full reference key set turns
+#     a wrong number into an error.
+#
+#   * Row order is not used by the lookup, but two tables that differ only in
+#     row order produce byte-different objects, which makes cached results and
+#     regression tests disagree for no reason. Canonicalising the order removes
+#     that.
+#
+# Extra keys beyond the reference are kept, appended after the canonical block.
+# That is the whole point for modified bases: a 5mC set adds stacks rather than
+# replacing them.
+.resolve_table <- function(x, arg_name, choices) {
+  # `is.null(dim(x))` is load-bearing: a character MATRIX satisfies
+  # is.character(), so testing the type alone sends a table of the wrong
+  # storage mode down the parameter-set-name path, where match.arg() reports
+  # "'arg' must be of length 1" and says nothing about the actual problem.
+  if (is.character(x) && is.null(dim(x))) {
+    nm <- match.arg(x, choices)
+    return(list(tbl = get_table(nm), name = nm, user = FALSE))
+  }
+  if (!is.matrix(x) && !is.data.frame(x))
+    stop("`", arg_name, "` must be one of the built-in parameter set names, ",
+         "or a matrix / data.frame of thermodynamic parameters.",
+         call. = FALSE)
+
+  # Which built-in defines the required keys. A user table may name it with
+  # attr(x, "reference"); otherwise the argument's own default is used, which
+  # is right for DNA/DNA and wrong for anything else, so RNA or hybrid sets
+  # should set the attribute.
+  ref_name <- attr(x, "reference")
+  if (is.null(ref_name)) ref_name <- choices[1L]
+  ref_name <- match.arg(as.character(ref_name)[1L], choices)
+  ref      <- get_table(ref_name)
+
+  keep <- attributes(x)[intersect(c("salt_mM", "end_table"), names(attributes(x)))]
+
+  m <- if (is.data.frame(x)) as.matrix(x) else x
+  if (!is.numeric(m))
+    stop("`", arg_name, "` must be numeric; columns 1 and 2 are read as ",
+         "delta H (kcal/mol) and delta S (cal/mol/K).", call. = FALSE)
+  if (ncol(m) < 2L)
+    stop("`", arg_name, "` needs at least two columns (delta H, delta S).",
+         call. = FALSE)
+  m <- m[, 1:2, drop = FALSE]
+  colnames(m) <- colnames(ref)[1:2]
+
+  keys <- rownames(m)
+  if (is.null(keys) || anyNA(keys) || any(!nzchar(keys)))
+    stop("`", arg_name, "` must have row names giving the parameter keys, ",
+         "e.g. \"AA/TT\", \"init\", \"sym\".", call. = FALSE)
+  if (anyDuplicated(keys))
+    stop("`", arg_name, "` has duplicated row names: ",
+         paste(unique(keys[duplicated(keys)]), collapse = ", "), call. = FALSE)
+
+  req  <- rownames(ref)
+  miss <- setdiff(req, keys)
+  if (length(miss))
+    stop("`", arg_name, "` is missing ", length(miss), " key(s) required by ",
+         "the reference set '", ref_name, "': ",
+         paste(utils::head(miss, 10L), collapse = ", "),
+         if (length(miss) > 10L) ", ..." else "",
+         ". A missing key contributes zero to the calculation rather than ",
+         "raising an error, so it must be supplied explicitly.", call. = FALSE)
+
+  bad <- req[!is.finite(m[req, 1L]) | !is.finite(m[req, 2L])]
+  if (length(bad))
+    stop("`", arg_name, "` has non-finite values for: ",
+         paste(utils::head(bad, 10L), collapse = ", "), call. = FALSE)
+
+  extra <- setdiff(keys, req)
+  if (length(extra))
+    message("`", arg_name, "`: ", length(extra), " key(s) beyond the '",
+            ref_name, "' reference retained (",
+            paste(utils::head(extra, 6L), collapse = ", "),
+            if (length(extra) > 6L) ", ..." else "", ")")
+
+  m <- m[c(req, extra), , drop = FALSE]
+
+  # Reverse-complement symmetry. A key and its character reversal describe the
+  # same duplex read from opposite strands, so canonical stacks must agree;
+  # four rows of the shipped SantaLucia 2004 table were once transposed and
+  # this is the check that finds it. It is a warning rather than an error
+  # because a modified-base set legitimately breaks the symmetry: the
+  # complement of 5-methylcytosine is not 5-methylcytosine.
+  can <- grep("^[A-Za-z]{2}/[A-Za-z]{2}$", rownames(m), value = TRUE)
+  rc  <- vapply(can, .rev_str, character(1L), USE.NAMES = FALSE)
+  chk <- rc %in% rownames(m)
+  if (any(chk)) {
+    a <- m[can[chk], , drop = FALSE]; b <- m[rc[chk], , drop = FALSE]
+    off <- which(abs(a[, 1] - b[, 1]) > 1e-8 | abs(a[, 2] - b[, 2]) > 1e-8)
+    if (length(off))
+      warning("`", arg_name, "`: ", length(off), " key(s) disagree with their ",
+              "reverse complement (", paste(utils::head(can[chk][off], 6L),
+                                            collapse = ", "),
+              "). This is expected for modified bases and is a transposition ",
+              "error otherwise.", call. = FALSE)
+  }
+
+  for (a in names(keep)) attr(m, a) <- keep[[a]]
+  list(tbl = m, name = paste0("user-supplied (reference: ", ref_name, ")"),
+       user = TRUE)
+}
+
 get_table <- function(table_name) {
   if (!exists(table_name, envir = .TM_TABLE_CACHE, inherits = FALSE)) {
     assign(table_name, .TM_CONSTANTS[[table_name]], envir = .TM_TABLE_CACHE)
   }
   get(table_name, envir = .TM_TABLE_CACHE, inherits = FALSE)
-}
-
-
-# -----------------------------------------------------------------------------
-# FIX 5: Fast GC calculation
-# Add to R/GC.R as an internal helper .GC_fast()
-# -----------------------------------------------------------------------------
-
-#' @keywords internal
-.GC_fast <- function(seq_upper, ambiguous = FALSE) {
-  # seq_upper: already uppercased character string
-  n <- nchar(seq_upper)
-  if (n == 0L) return(NA_real_)
-
-  if (!ambiguous) {
-    nGC <- n - nchar(gsub("[GC]", "", seq_upper, perl = TRUE))
-    return(100 * nGC / n)
-  }
-
-  # Ambiguous: count each IUPAC code's GC contribution
-  # G=1, C=1, S(G+C)=1, Y(C+T)=0.5, R(A+G)=0.5,
-  # K(G+T)=0.5, M(A+C)=0.5, B(CGT)=2/3, D(AGT)=1/3, H(ACT)=1/3, V(ACG)=2/3
-  nG <- n - nchar(gsub("G", "", seq_upper, fixed = TRUE))
-  nC <- n - nchar(gsub("C", "", seq_upper, fixed = TRUE))
-  nS <- n - nchar(gsub("S", "", seq_upper, fixed = TRUE))   # G+C = 1.0
-  nY <- n - nchar(gsub("Y", "", seq_upper, fixed = TRUE))   # C+T = 0.5
-  nR <- n - nchar(gsub("R", "", seq_upper, fixed = TRUE))   # A+G = 0.5
-  nK <- n - nchar(gsub("K", "", seq_upper, fixed = TRUE))   # G+T = 0.5
-  nM <- n - nchar(gsub("M", "", seq_upper, fixed = TRUE))   # A+C = 0.5
-  nB <- n - nchar(gsub("B", "", seq_upper, fixed = TRUE))   # C+G+T = 2/3
-  nV <- n - nchar(gsub("V", "", seq_upper, fixed = TRUE))   # A+C+G = 2/3
-
-  gc_count <- nG + nC + nS + 0.5*(nY + nR + nK + nM) + (2/3)*(nB + nV)
-  100 * gc_count / n
 }
 
 
@@ -778,62 +1167,3 @@ complement_fast <- function(seq_str, rev = FALSE) {
 
 
 
-# -----------------------------------------------------------------------------
-# QUICK BENCHMARK to verify gains
-# -----------------------------------------------------------------------------
-
-#' @keywords internal
-benchmark_tm_nn <- function(n_seqs = 1000L, seq_len = 200L) {
-  set.seed(42)
-  bases <- c("A", "C", "G", "T")
-  seqs <- vapply(seq_len(n_seqs), function(i) {
-    paste(sample(bases, seq_len, replace = TRUE), collapse = "")
-  }, character(1))
-
-  cat(sprintf(
-    "Benchmarking per-row tm_nn() vs one tm_nn() on a multi-row GRanges (%d seq x %d bp)\n\n",
-    n_seqs, seq_len
-  ))
-
-  t_loop <- system.time({
-    tm_loop <- vapply(seq_along(seqs), function(i) {
-      gr_i <- to_genomic_ranges(seqs[i])
-      out <- tm_nn(gr_i, Na = 50, salt_method = "Owczarzy2004")
-      as.numeric(S4Vectors::mcols(out$gr)$Tm[1])
-    }, numeric(1))
-  })
-
-  gr_all <- to_genomic_ranges(seqs)
-  t_batch <- system.time({
-    out_b <- tm_nn(gr_all, Na = 50, salt_method = "Owczarzy2004")
-    tm_batch <- as.numeric(S4Vectors::mcols(out_b$gr)$Tm)
-  })
-
-  cat(sprintf("  Per-sequence (loop):       %.2f sec\n", t_loop["elapsed"]))
-  cat(sprintf("  One tm_nn() on GRanges:    %.2f sec\n", t_batch["elapsed"]))
-  if (t_batch["elapsed"] > 0) {
-    cat(sprintf(
-      "  Speedup:                   %.1fx\n\n",
-      unname(t_loop["elapsed"] / t_batch["elapsed"])
-    ))
-  }
-
-  valid <- !is.na(tm_loop) & !is.na(tm_batch)
-  if (sum(valid) > 0) {
-    max_diff <- max(abs(tm_loop[valid] - tm_batch[valid]))
-    cat(sprintf(
-      "  Max Tm difference: %.6f deg C %s\n",
-      max_diff,
-      if (max_diff < 0.01) "(PASS)" else "(CHECK!)"
-    ))
-  }
-
-  invisible(list(
-    loop = tm_loop, batch = tm_batch,
-    speedup = if (t_batch["elapsed"] > 0) {
-      unname(t_loop["elapsed"] / t_batch["elapsed"])
-    } else {
-      NA_real_
-    }
-  ))
-}

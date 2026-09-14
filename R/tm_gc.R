@@ -61,7 +61,7 @@
 #' 
 #' @param formamide_factor Coefficient of Tm decrease per percent formamide. Default: 0.65
 #'   Several papers report factors between 0.6 and 0.72.
-#' 
+#'
 #' @returns Returns a list with two components:
 #'   - Tm: A list of sequences with updated Tm attributes
 #'   - Options: A list containing calculation parameters and method information
@@ -135,75 +135,52 @@ tm_gc <- function(gr_seq,
   # Filter sequence
   gr_seq$sequence <- check_filter_seq(gr_seq$sequence, method = 'tm_gc')
 
-  # Calculate Tm for each sequence and update seq_checked
-  seq_tm <- sapply(seq_along(gr_seq), function(i) {
-    filtered_seq <- gr_seq$sequence[i]
-    n_seq <- nchar(filtered_seq)
-    pt_gc <- gc(filtered_seq, ambiguous = ambiguous)
-    tm <- gc_coef[1] + gc_coef[2]*pt_gc - gc_coef[3]/n_seq
-    if (mismatch == TRUE) {
-      mismatch_count <- sum(filtered_seq %in% 'X')
-      tm <- tm - gc_coef[4]*(mismatch_count*100/n_seq)
-    }
-    if (!is.null(userset)) {
-      corr_salt <- salt_correct(Na = Na,
-                                  K = K, 
-                                  Tris = Tris, 
-                                  Mg = Mg,
-                                  dNTPs = dNTPs,
-                                  method = salt_method,
-                                  input_seq = filtered_seq,
-                                  ambiguous = ambiguous)
-    } else {
-      if (variant %in% c("Schildkraut1965", "Wetmur1991_MELTING", "Wetmur1991_RNA", "Wetmur1991_RNA/DNA", "Primer3Plus", "vonAhsen2001")) {
-        if (variant == "Schildkraut1965") {
-          salt_method <- "Schildkraut2010"
-        } else if (variant == "Wetmur1991_MELTING") {
-          salt_method <- "Wetmur1991"
-        } else if (variant == "Wetmur1991_RNA") {
-          salt_method <- "Wetmur1991"
-        } else if (variant == "Wetmur1991_RNA/DNA") {
-          salt_method <- "Wetmur1991"
-        } else if (variant == "Primer3Plus") {
-          salt_method <- "Schildkraut2010"
-        } else if (variant == "vonAhsen2001") {
-          salt_method <- "SantaLucia1998-1"
-        }
-        corr_salt <- salt_correct(Na = Na,
-                                    K = K, 
-                                    Tris = Tris, 
-                                    Mg = Mg,
-                                    dNTPs = dNTPs,
-                                    method = salt_method,
-                                    input_seq = filtered_seq,
-                                    ambiguous = ambiguous)
-      } else {
-        corr_salt <- 0
-      }
-    }
+  # Resolve the effective salt-correction method once (loop-invariant):
+  # NA_character_ means no salt correction (Chester1993, QuikChange).
+  if (!is.null(userset)) {
+    salt_method_eff <- salt_method
+  } else {
+    salt_method_eff <- switch(variant,
+      "Schildkraut1965"    = "Schildkraut2010",
+      "Wetmur1991_MELTING" = "Wetmur1991",
+      "Wetmur1991_RNA"     = "Wetmur1991",
+      "Wetmur1991_RNA/DNA" = "Wetmur1991",
+      "Primer3Plus"        = "Schildkraut2010",
+      "vonAhsen2001"       = "SantaLucia1998-1",
+      NA_character_)
+  }
 
-    tm <- tm + corr_salt
+  # Normalize gc_coef to a plain numeric vector of the four coefficients
+  # (when userset is NULL it is a 1-row data.frame from GC_VARTAB)
+  if (is.data.frame(gc_coef) || is.list(gc_coef)) {
+    gc_coef <- vapply(gc_coef[1:4], function(x) as.numeric(x[1]), numeric(1))
+  } else {
+    gc_coef <- as.numeric(gc_coef)[1:4]
+  }
 
-    if (DMSO > 0 | formamide_unit$value > 0) {
-      corr_chem <- chem_correct(DMSO = DMSO, 
-                                   formamide_unit = formamide_unit, 
-                                   dmso_factor = dmso_factor, 
-                                   formamide_factor = formamide_factor, 
-                                   pt_gc = pt_gc)
-      tm <- tm + corr_chem
-    }
-    return(list(Tm = tm, GC = pt_gc))
-  })
-  
-  gr_seq$GC <- unlist(seq_tm[2,])
-  gr_seq$Tm <- unlist(seq_tm[1,])
+  # Calculate Tm for all sequences in one vectorised pass
+  chunk_res <- .tm_gc_chunk(
+    list(sequence = as.character(gr_seq$sequence)),
+    ambiguous = ambiguous, gc_coef = gc_coef, mismatch = mismatch,
+    salt_method_eff = salt_method_eff,
+    Na = Na, K = K, Tris = Tris, Mg = Mg, dNTPs = dNTPs,
+    DMSO = DMSO, formamide_unit = formamide_unit,
+    dmso_factor = dmso_factor, formamide_factor = formamide_factor
+  )
+
+  # One mcols<- assignment rather than two `$<-`: each `$<-` replaces the
+  # whole metadata DataFrame and revalidates the GRanges, which dominates the
+  # cost of a call on a short input.
+  mc_out    <- GenomicRanges::mcols(gr_seq)
+  mc_out$GC <- chunk_res$GC
+  mc_out$Tm <- chunk_res$Tm
+  GenomicRanges::mcols(gr_seq) <- mc_out
   gr_seq <- .normalize_tm_gc_metadata(gr_seq)
 
   # Create result list with proper structure
-  df_gr <- as.data.frame(gr_seq)
+  # (result$df is computed lazily via `$.TmCalculator`)
   result_list <- list(
     gr = gr_seq,
-    df = df_gr,
     options = list(
       Ambiguous = ambiguous,
       Method = paste0(variant, " (", 
@@ -233,6 +210,53 @@ tm_gc <- function(gr_seq,
   # Set class and attributes
   class(result_list) <- c("TmCalculator", "list")
   attr(result_list, "nonhidden") <- "gr"
-  
+
   return(result_list)
+}
+
+# -- GC-method Tm over a block of sequences -----------------------------------
+# `chunk` is list(sequence=) for the whole input.
+#' @keywords internal
+.tm_gc_chunk <- function(chunk, ambiguous, gc_coef, mismatch, salt_method_eff,
+                         Na, K, Tris, Mg, dNTPs,
+                         DMSO, formamide_unit, dmso_factor, formamide_factor) {
+  seqs <- chunk$sequence
+  m    <- length(seqs)
+  if (m == 0L) return(list(Tm = numeric(0), GC = numeric(0)))
+
+  # Previously this was a per-sequence loop calling gc_content(), which split every
+  # sequence with s2c() and scanned it five times, and salt_correct(), which
+  # did the same again. On 23,208 E. coli windows that cost 51.7 s against
+  # 0.67 s for the compiled nearest-neighbor path. Both are now computed for
+  # the whole chunk at once.
+  n_seq <- nchar(seqs)
+  pt_gc <- .gc_vec(seqs, ambiguous = ambiguous)
+
+  tm <- gc_coef[1] + gc_coef[2] * pt_gc - gc_coef[3] / n_seq
+
+  if (isTRUE(mismatch)) {
+    # Behaviour preserved deliberately: `seqs %in% "X"` is TRUE only when an
+    # entire sequence is the single character "X", so this term is zero for
+    # any real input. Vectorising it as-is keeps results identical; the
+    # underlying counting bug is recorded in ROADMAP.md rather than changed
+    # here, where it would silently alter published values.
+    mismatch_count <- as.numeric(seqs %in% "X")
+    tm <- tm - gc_coef[4] * (mismatch_count * 100 / n_seq)
+  }
+
+  if (!is.na(salt_method_eff)) {
+    tm <- tm + .salt_correct_vec(Na = Na, K = K, Tris = Tris, Mg = Mg,
+                                 dNTPs = dNTPs, method = salt_method_eff,
+                                 gc_pct = pt_gc, seq_len = n_seq)
+  }
+
+  if (DMSO > 0 | formamide_unit$value > 0) {
+    tm <- tm + chem_correct(DMSO = DMSO,
+                            formamide_unit = formamide_unit,
+                            dmso_factor = dmso_factor,
+                            formamide_factor = formamide_factor,
+                            pt_gc = pt_gc)
+  }
+
+  list(Tm = as.numeric(tm), GC = as.numeric(pt_gc))
 }

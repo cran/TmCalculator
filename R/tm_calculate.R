@@ -45,17 +45,21 @@
 #'     \itemize{
 #'       \item DNA/DNA: "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996",
 #'         "DNA_NN_Allawi_1998", "DNA_NN_SantaLucia_2004" (default)
+#'       \item DNA/DNA, molecular crowding: "DNA_NN_Ghosh_2020_PEG200"
+#'         (40 wt% PEG200, 100 mM NaCl)
 #'       \item DNA/DNA, salt-optimized: "DNA_NN_Weber_2015" (1020 mM),
 #'         "DNA_NN_Weber_OW04_69", "..._119", "..._220", "..._621",
 #'         "..._1020" (fitted at 69 to 1020 mM sodium)
 #'       \item RNA/RNA: "RNA_NN_Freier_1986", "RNA_NN_Xia_1998",
-#'         "RNA_NN_Chen_2012"
+#'         "RNA_NN_Chen_2012", "RNA_NN_Zuber_2022" (improved end effects),
+#'         "RNA_NN_Ghosh_2023_PEG200" (molecular crowding, cell-like)
 #'       \item RNA/RNA, salt-optimized: "RNA_NN_Weber_VIF_71", "..._121",
 #'         "..._221", "..._621", "..._1021" and the corresponding
 #'         "RNA_NN_Weber_FIF_*" sets
 #'       \item RNA/DNA: "RNA_DNA_NN_Sugimoto_1995",
 #'         "RNA_DNA_NN_Weber_2019_FT", "RNA_DNA_NN_Weber_2019_VH" (1000 mM),
-#'         "RNA_DNA_NN_Weber_2019_LS" (100 mM)
+#'         "RNA_DNA_NN_Weber_2019_LS" (100 mM),
+#'         "RNA_DNA_NN_Banerjee_2020" (100 mM)
 #'     }
 #'   \item \code{tmm_table} (Terminal Mismatches):
 #'     \itemize{
@@ -164,6 +168,35 @@
 #'   again. See \code{\link{tm_nn}} for the full list and guidance on choosing
 #'   between them. Default: "DNA_NN_SantaLucia_2004"
 #' 
+#'
+#'   Alternatively, supply a matrix or data.frame of parameters directly. This
+#'   is the route for parameter sets the package does not ship, in particular
+#'   sets covering modified bases such as 5-methylcytosine. Requirements:
+#'   \itemize{
+#'     \item numeric, with columns 1 and 2 read as delta H (kcal/mol) and
+#'       delta S (cal/mol/K); further columns are ignored;
+#'     \item row names giving the parameter keys, e.g. \code{"AA/TT"},
+#'       \code{"init"}, \code{"init_A/T"}, \code{"sym"};
+#'     \item every key of a built-in reference set must be present. The
+#'       reference is named by \code{attr(x, "reference")}, or defaults to
+#'       the first built-in listed for the argument, which is a DNA/DNA set;
+#'       RNA and hybrid tables should therefore set the attribute. Extra keys
+#'       beyond the reference are kept, which is how a modified-base set adds
+#'       stacks rather than replacing them.
+#'   }
+#'   The supplied table is reordered to the reference key order before use, so
+#'   that two tables differing only in row order give identical results. A
+#'   missing key would otherwise contribute zero to the calculation instead of
+#'   raising an error, which is why the full key set is required. Keys that
+#'   disagree with their reverse complement produce a warning: expected for
+#'   modified bases, a transposition error otherwise.
+#'
+#'   Two optional attributes are honoured. \code{attr(x, "salt_mM")} marks a
+#'   set as fitted at a stated sodium concentration, which suppresses the salt
+#'   correction at that concentration exactly as for the built-in sets fitted
+#'   this way; without it the table is treated as a reference-condition set and
+#'   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
+#'   companion penultimate-pair end-effect table.
 #' @param tmm_table Thermodynamic parameters for terminal mismatches. Only applicable for the NN method.
 #'   Default: "DNA_TMM_Bommarito_2000"
 #' 
@@ -224,7 +257,7 @@
 #' 
 #' @param mismatch Logical. If TRUE, every '.' in the sequence is counted as a mismatch.
 #'   Only applicable for the GC method. Default: TRUE
-#' 
+#'
 #' @details
 #' The three methods differ in resolution and in the range of sequence lengths
 #' over which they are calibrated, so they are not interchangeable.
@@ -265,7 +298,6 @@
 #' 
 #' @export
 #' 
-#' @importFrom BSgenome available.genomes
 #' @importFrom GenomeInfoDb genome
 #' 
 #' @examples
@@ -298,12 +330,15 @@ tm_calculate <- function(input_seq,
                         ambiguous = FALSE,
                         shift = 0,
                         nn_table = c("DNA_NN_SantaLucia_2004",
+                                    "DNA_NN_Ghosh_2020_PEG200",
                                     "DNA_NN_Breslauer_1986",
                                     "DNA_NN_Sugimoto_1996",
                                     "DNA_NN_Allawi_1998",
                                     "RNA_NN_Freier_1986",
                                     "RNA_NN_Xia_1998",
                                     "RNA_NN_Chen_2012",
+                                    "RNA_NN_Zuber_2022",
+                                    "RNA_NN_Ghosh_2023_PEG200",
                                     "RNA_DNA_NN_Sugimoto_1995",
                                     "DNA_NN_Weber_2015",
                                     "DNA_NN_Weber_OW04_69",
@@ -323,7 +358,8 @@ tm_calculate <- function(input_seq,
                                     "RNA_NN_Weber_FIF_1021",
                                     "RNA_DNA_NN_Weber_2019_FT",
                                     "RNA_DNA_NN_Weber_2019_VH",
-                                    "RNA_DNA_NN_Weber_2019_LS"),
+                                    "RNA_DNA_NN_Weber_2019_LS",
+                                    "RNA_DNA_NN_Banerjee_2020"),
                         tmm_table = "DNA_TMM_Bommarito_2000",
                         imm_table = "DNA_IMM_Peyret_1999",
                         de_table = c("DNA_DE_Bommarito_2000",
@@ -359,6 +395,12 @@ tm_calculate <- function(input_seq,
                         mismatch = TRUE) {
   # Validate method argument
   method <- match.arg(method, several.ok = FALSE)
+
+  # Validate salt_method once and pass a scalar down. Without this, the
+  # full default candidate vector reached tm_gc(), whose own match.arg()
+  # (which has no "none" choice) then failed with "'arg' must be of
+  # length 1" for any tm_gc call relying on defaults.
+  salt_method <- match.arg(salt_method)
   
   # convert input_seq to genomic ranges
   if (inherits(input_seq, "GRanges")) {
@@ -396,7 +438,7 @@ tm_calculate <- function(input_seq,
       formamide_factor = formamide_factor
     )
   }
-  
+
   if ("tm_gc" %in% method) {
     result <- tm_gc(
       gr_seq = gr,
@@ -416,7 +458,7 @@ tm_calculate <- function(input_seq,
       formamide_factor = formamide_factor
     )
   }
-  
+
   if ("tm_wallace" %in% method) {
     result <- tm_wallace(
       gr_seq = gr,
@@ -424,10 +466,8 @@ tm_calculate <- function(input_seq,
     )
   }
 
-  # Ensure a data.frame representation is always available
-  if (!is.null(result$gr) && is.null(result$df)) {
-    result$df <- as.data.frame(result$gr)
-  }
-
+  # A data.frame representation is available lazily via result$df
+  # (see `$.TmCalculator` in print.TmCalculator.R); converting
+  # genome-scale GRanges eagerly here cost seconds per call.
   result
 }

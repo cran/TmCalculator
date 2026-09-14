@@ -28,17 +28,20 @@
 #' @param method Sequence extraction strategy:
 #'   \describe{
 #'     \item{\code{"vectorized"}}{One \code{getSeq()} call per genome package
-#'       (default).}
-#'     \item{\code{"preload_chr"}}{Load each chromosome once and extract windows
-#'       with \code{subseq()}. Faster for dense whole-chromosome tiling; uses
-#'       more memory.}
+#'       (default). Best when windows are scattered across many chromosomes.}
+#'     \item{\code{"preload_chr"}}{Load each chromosome once and extract all
+#'       of its windows in a single \code{extractAt()} call. Recommended for
+#'       dense tiling of one or a few chromosomes (e.g. genome-wide sliding
+#'       windows), where it is several times faster than \code{getSeq()};
+#'       holds one chromosome in memory at a time.}
 #'   }
 #'
 #' @return A \code{GRanges} object with metadata columns:
 #'   \describe{
 #'     \item{\code{sequence}}{Reference sequence for each interval.}
 #'     \item{\code{complement}}{Complementary sequence.}
-#'     \item{\code{GC}}{GC fraction (0-1) per interval.}
+#'     \item{\code{GC}}{GC percentage (0-100) per interval, computed as
+#'       \code{100 * (G+C)/(A+C+G+T)} so that N is excluded from the denominator.}
 #'     \item{\code{region_id}}{Region identifier from the coordinate string.}
 #'     \item{\code{genome_pkg}}{BSgenome package name used.}
 #'   }
@@ -65,7 +68,7 @@
 #' @importFrom GenomicRanges GRanges seqnames start end width strand mcols
 #' @importFrom IRanges IRanges
 #' @importFrom GenomeInfoDb seqlengths seqlevels
-#' @importFrom Biostrings getSeq letterFrequency complement reverseComplement
+#' @importFrom Biostrings getSeq letterFrequency alphabetFrequency complement reverseComplement
 #'   DNAStringSet DNAString subseq
 #' @importFrom S4Vectors mcols
 #' @encoding UTF-8
@@ -134,9 +137,17 @@ coor_to_genomic_ranges <- function(
   S4Vectors::mcols(gr_out)$region_id  <- parsed$region_id
   S4Vectors::mcols(gr_out)$genome_pkg <- parsed$pkg_name
 
-  gc_counts <- Biostrings::letterFrequency(seqs, letters = "GC", as.prob = FALSE)[, 1]
-  win_widths <- parsed$win_end - parsed$win_start + 1L
-  S4Vectors::mcols(gr_out)$GC <- round(gc_counts / win_widths, 6)
+  # GC on the same definition used everywhere else in the package:
+  # 100 * (G+C) / (A+C+G+T), so that N does not enter the denominator and the
+  # column is a percentage rather than a fraction. Previously this wrote
+  # (G+C)/width as a 0-1 fraction, which made the same column name mean two
+  # different things depending on how the object had been built.
+  base_counts <- Biostrings::alphabetFrequency(seqs, baseOnly = TRUE)
+  gc_counts   <- base_counts[, "C"] + base_counts[, "G"]
+  acgt_counts <- rowSums(base_counts[, c("A", "C", "G", "T"), drop = FALSE])
+  S4Vectors::mcols(gr_out)$GC <- ifelse(acgt_counts > 0,
+                                        round(100 * gc_counts / acgt_counts, 6),
+                                        NA_real_)
 
   if (!is.null(complement_seq)) {
     comp_input <- if (is.list(complement_seq)) {
@@ -322,7 +333,7 @@ coor_to_genomic_ranges <- function(
 #' @keywords internal
 .getseq_preload_chr <- function(gr_query, genome_objs, parsed) {
   n    <- length(gr_query)
-  seqs <- vector("list", n)
+  seqs <- Biostrings::DNAStringSet(rep("", n))
 
   for (pkg in names(genome_objs)) {
     genome  <- genome_objs[[pkg]]
@@ -347,30 +358,33 @@ coor_to_genomic_ranges <- function(
         }
       )
       if (is.null(chr_seq)) {
-        seqs[idx_chr] <- list(Biostrings::DNAString(""))
-        next
+        next  # leave "" placeholders for this chromosome
+      }
+      if (inherits(chr_seq, "MaskedDNAString")) {
+        chr_seq <- Biostrings::unmasked(chr_seq)
       }
 
       chr_len  <- length(chr_seq)
-      starts_i <- parsed$win_start[idx_chr]
-      ends_i   <- parsed$win_end[idx_chr]
-      starts_i <- pmax(1L, starts_i)
-      ends_i   <- pmin(chr_len, ends_i)
+      starts_i <- pmax(1L, parsed$win_start[idx_chr])
+      ends_i   <- pmin(chr_len, parsed$win_end[idx_chr])
 
-      seqs_chr <- Biostrings::subseq(chr_seq, start = starts_i, end = ends_i)
+      # One C-level call extracts all windows as lightweight views of the
+      # loaded chromosome -- no per-window S4 objects, no as.list()/unlist().
+      seqs_chr <- Biostrings::extractAt(
+        chr_seq, IRanges::IRanges(start = starts_i, end = ends_i)
+      )
 
       minus_idx <- which(parsed$strand[idx_chr] == "-")
       if (length(minus_idx) > 0) {
         seqs_chr[minus_idx] <- Biostrings::reverseComplement(seqs_chr[minus_idx])
       }
 
-      seqs[idx_chr] <- as.list(seqs_chr)
+      seqs[idx_chr] <- seqs_chr
       rm(chr_seq)
-      base::gc(verbose = FALSE)
     }
   }
 
-  Biostrings::DNAStringSet(unlist(seqs))
+  seqs
 }
 
 

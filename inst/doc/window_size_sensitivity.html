@@ -12,7 +12,7 @@
 
 <meta name="author" content="Junhui Li, Lihua Julie Zhu" />
 
-<meta name="date" content="2026-09-12" />
+<meta name="date" content="2026-09-21" />
 
 <title>Window-Size Sensitivity of Genome-Wide Tm Profiles</title>
 
@@ -341,12 +341,30 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">Window-Size Sensitivity of Genome-Wide Tm
 Profiles</h1>
 <h4 class="author">Junhui Li, Lihua Julie Zhu</h4>
-<h4 class="date">2026-09-12</h4>
+<h4 class="date">2026-09-21</h4>
 
 
+<div id="TOC">
+<ul>
+<li><a href="#introduction" id="toc-introduction"><span class="toc-section-number">1</span> Introduction</a></li>
+<li><a href="#setup" id="toc-setup"><span class="toc-section-number">2</span> Setup</a></li>
+<li><a href="#sensitivity-analysis" id="toc-sensitivity-analysis"><span class="toc-section-number">3</span> Sensitivity analysis</a>
+<ul>
+<li><a href="#distributional-stability" id="toc-distributional-stability"><span class="toc-section-number">3.1</span> Distributional stability</a></li>
+<li><a href="#cross-scale-agreement" id="toc-cross-scale-agreement"><span class="toc-section-number">3.2</span> Cross-scale agreement</a></li>
+<li><a href="#robustness-of-the-mutl-ar-association" id="toc-robustness-of-the-mutl-ar-association"><span class="toc-section-number">3.3</span> Robustness of the MutL-AR
+association</a></li>
+<li><a href="#one-table-for-the-whole-analysis" id="toc-one-table-for-the-whole-analysis"><span class="toc-section-number">3.4</span> One table for the whole
+analysis</a></li>
+<li><a href="#multi-scale-tracks-alongside-the-multi-omics-layers" id="toc-multi-scale-tracks-alongside-the-multi-omics-layers"><span class="toc-section-number">3.5</span> Multi-scale tracks alongside the
+multi-omics layers</a></li>
+</ul></li>
+<li><a href="#session-information" id="toc-session-information"><span class="toc-section-number">4</span> Session Information</a></li>
+</ul>
+</div>
 
-<div id="introduction" class="section level1">
-<h1>Introduction</h1>
+<div id="introduction" class="section level1" number="1">
+<h1><span class="header-section-number">1</span> Introduction</h1>
 <p>Any window-based genomic profile depends on the window size, which
 acts as a smoothing bandwidth: too large and local signal is averaged
 away, too small and single-window noise dominates. This vignette
@@ -364,8 +382,8 @@ develops the full case study at the 200 bp resolution used by Hasenauer
 <em>et al.</em> (2025), including the MutL-associated region (MutL-AR)
 comparison that is re-tested here at every window size.</p>
 </div>
-<div id="setup" class="section level1">
-<h1>Setup</h1>
+<div id="setup" class="section level1" number="2">
+<h1><span class="header-section-number">2</span> Setup</h1>
 <p>We reproduce the minimum needed from the main case study: the genome,
 the MutL-AR peak coordinates, and the reference labels used for
 plotting.</p>
@@ -431,8 +449,9 @@ from the NCBI assembly accession.</p>
 <span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a>)</span></code></pre></div>
 <hr />
 </div>
-<div id="sensitivity-analysis" class="section level1">
-<h1>Sensitivity analysis</h1>
+<div id="sensitivity-analysis" class="section level1" number="3">
+<h1><span class="header-section-number">3</span> Sensitivity
+analysis</h1>
 <p>For each window size we retile the chromosome, recompute Tm and GC,
 and re-run the MutL-AR comparison, keeping every other setting fixed.
 Nothing downstream needs to change: the annotation layers keep their own
@@ -462,8 +481,9 @@ overlap-based statistics work across mixed resolutions.</p>
 <span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">gr =</span> tm_w, <span class="at">ann =</span> ann, <span class="at">test =</span> cg)</span>
 <span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a>})</span>
 <span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="fu">names</span>(sens) <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">&quot;w&quot;</span>, window_sizes)</span></code></pre></div>
-<div id="distributional-stability" class="section level3">
-<h3>Distributional stability</h3>
+<div id="distributional-stability" class="section level2" number="3.1">
+<h2><span class="header-section-number">3.1</span> Distributional
+stability</h2>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>dist_tbl <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(<span class="fu">seq_along</span>(window_sizes), <span class="cf">function</span>(i) {</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  g <span class="ot">&lt;-</span> sens[[i]]<span class="sc">$</span>gr</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
@@ -576,8 +596,9 @@ at 500 bp, a ratio of 1.66) – window size acts as a smoothing bandwidth.
 The mean GC is invariant (50.791 throughout), confirming that the
 composition landscape itself does not depend on the tiling.</p>
 </div>
-<div id="cross-scale-agreement" class="section level3">
-<h3>Cross-scale agreement</h3>
+<div id="cross-scale-agreement" class="section level2" number="3.2">
+<h2><span class="header-section-number">3.2</span> Cross-scale
+agreement</h2>
 <p>Every profile is aggregated onto one common grid (mean Tm per bin)
 and the resulting series are correlated.</p>
 <p>The grid is 1 kb rather than 500 bp, and the choice matters.
@@ -616,8 +637,9 @@ should do, and is the behaviour the 500 bp grid obscured. Window size
 rescales and smooths the profile but preserves the spatial
 landscape.</p>
 </div>
-<div id="robustness-of-the-mutl-ar-association" class="section level3">
-<h3>Robustness of the MutL-AR association</h3>
+<div id="robustness-of-the-mutl-ar-association" class="section level2" number="3.3">
+<h2><span class="header-section-number">3.3</span> Robustness of the
+MutL-AR association</h2>
 <p>Finally, the vignette’s biological conclusion – that Tm and GC differ
 between MutL-AR peak windows and the genomic background – is re-tested
 at every window size:</p>
@@ -689,8 +711,9 @@ at every window size:</p>
 ## 15     GC
 ## 16     GC</code></pre>
 </div>
-<div id="one-table-for-the-whole-analysis" class="section level3">
-<h3>One table for the whole analysis</h3>
+<div id="one-table-for-the-whole-analysis" class="section level2" number="3.4">
+<h2><span class="header-section-number">3.4</span> One table for the
+whole analysis</h2>
 <p>Both questions are answered by the same four rows, so they are
 assembled into a single table: the first four columns say what window
 size does to the landscape, and the last three say what it does to the
@@ -812,8 +835,9 @@ not, and averaging over it dilutes the contrast, whereas a 50 bp window
 resolves the peak more sharply. The three coarser tilings agree within
 0.1 degrees C.</p>
 </div>
-<div id="multi-scale-tracks-alongside-the-multi-omics-layers" class="section level3">
-<h3>Multi-scale tracks alongside the multi-omics layers</h3>
+<div id="multi-scale-tracks-alongside-the-multi-omics-layers" class="section level2" number="3.5">
+<h2><span class="header-section-number">3.5</span> Multi-scale tracks
+alongside the multi-omics layers</h2>
 <p>Because every track keeps its native resolution, the four Tm/GC
 profiles can be drawn as concentric layers of one integrated figure,
 together with the annotation data:</p>
@@ -917,8 +941,9 @@ resolution.</p>
 <hr />
 </div>
 </div>
-<div id="session-information" class="section level1">
-<h1>Session Information</h1>
+<div id="session-information" class="section level1" number="4">
+<h1><span class="header-section-number">4</span> Session
+Information</h1>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
 <pre><code>## R version 4.4.1 (2024-06-14)
 ## Platform: x86_64-apple-darwin20
@@ -944,7 +969,7 @@ resolution.</p>
 ##  [5] Biostrings_2.72.1                  XVector_0.44.0                    
 ##  [7] GenomicRanges_1.56.2               GenomeInfoDb_1.40.1               
 ##  [9] IRanges_2.38.1                     S4Vectors_0.42.1                  
-## [11] BiocGenerics_0.50.0                TmCalculator_1.1.0                
+## [11] BiocGenerics_0.50.0                TmCalculator_1.1.1                
 ## 
 ## loaded via a namespace (and not attached):
 ##   [1] DBI_1.2.3                   bitops_1.0-9               

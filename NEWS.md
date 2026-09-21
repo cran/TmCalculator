@@ -1,4 +1,56 @@
-# TmCalculator 1.1.0
+# TmCalculator 1.1.1
+
+## New features
+
+* **`tm_calculate()` now takes a source and a set of regions, and can spread
+  the work over processes.** It accepted four kinds of input already; it can
+  now be told which part of that input to use, how finely to tile it, and how
+  many workers to divide it among:
+
+  ```r
+  tm_calculate("BSgenome.Hsapiens.UCSC.hg38", window = 200, slide = 200,
+               BPPARAM = SnowParam(workers = 5))          # a whole genome
+  tm_calculate("contigs.fa.gz", regions = c("contig_7", "contig_9:1-50000"))
+  tm_calculate(oligos)                                    # unchanged
+  ```
+
+  `regions` means the same thing for every source, because the identifier
+  before the colon is resolved against whatever names the source itself
+  offers and falls back to position. So `"chr1"` is a chromosome in a
+  BSgenome, a record in a FASTA file and a `seqname` in a `GRanges`, and
+  `"1:1-200"` is the first 200 bases of the first sequence in an unnamed
+  character vector.
+
+  Parallelism divides the work **by region and never by the sequences of one
+  region**. Each task opens the source itself, so only a name and a
+  coordinate pair cross between processes; sequences supplied directly are
+  staged to a temporary FASTA for the same reason. That is the arrangement
+  that pays: dividing the sequences of a single call parallelises the inner
+  loop alone and leaves window construction, sequence retrieval and result
+  assembly in the calling process, which measured slower than not dividing
+  them at all.
+
+  A call that passes sequences and nothing else behaves exactly as before,
+  and takes the same short path through the function.
+
+* **`tm_profile()` has been removed**, having been merged into
+  `tm_calculate()`, which takes the same arguments under the same names. The
+  one difference to watch for is the return value: `tm_profile()` gave a bare
+  `GRanges`, whereas `tm_calculate()` gives a `TmCalculator` object, so the
+  profile is `$gr`.
+
+* **An unnamed sequence is keyed by its position, not by `chr1`.**
+  `tm_calculate(c("ACGT...", "GGCC..."))` labelled every window `chr1`,
+  naming a chromosome that was not involved and giving every row the same
+  key, so nothing in the result said which input a given Tm came from. The
+  `seqname` is now `"1"`, `"2"` and so on, which is also what
+  `regions = "3:1-20"` already meant for an unnamed vector. Sequences that
+  carry names, or names in `chr:start-end` form, are unaffected.
+
+* **FASTA input keeps its record names.** `tm_calculate("reads.fa")`
+  previously labelled every window `chr1`, because a record name that is not
+  in `chr:start-end` form fell through to the default; the record name now
+  becomes the `seqname`. Tm values are unaffected.
 
 ## Bug fix affecting all nearest-neighbor Tm values
 
@@ -52,9 +104,11 @@
   values 100× larger than before, and slightly larger again wherever N is
   present. Values from `tm_gc()`, `tm_wallace()` and `gc()` are unchanged.
 
-* **The `BPPARAM` argument has been removed from `tm_calculate()`,
-  `tm_nn()`, `tm_gc()` and `tm_wallace()`, and `BiocParallel` is no longer
-  imported.** With the compiled nearest-neighbor core the per-window loop is
+* **`BPPARAM` no longer divides the sequences of one call, and is gone from
+  `tm_nn()`, `tm_gc()` and `tm_wallace()` entirely.** `tm_calculate()` keeps
+  a `BPPARAM`, but it now means something else: the work is divided by
+  region, with each task opening the source for itself, and never by
+  splitting the sequences of one region among workers. With the compiled nearest-neighbor core the per-window loop is
   a minority of a call's runtime; the rest (N filtering, coercion, result
   assembly) runs once in the calling process and cannot be divided. Measured
   on chr1 of GRCh38 (about 1.2 million windows), `SnowParam(5)` never beat
@@ -63,11 +117,11 @@
   therefore offered a slower path and no faster one, and it is gone rather
   than kept as a no-op, so that calls passing it fail loudly.
 
-  Parallelism belongs outside the call, one region per worker, each a
-  serial `tm_calculate()`. That pattern needs no support from this package
-  and works with any backend; `vignette("hg38_performance_parallel")`
-  measures it with `BiocParallel` across a whole genome, which is why
-  `BiocParallel` remains in Suggests.
+  Parallelism is now the business of `tm_calculate()` itself, one region per
+  worker, which is why `BiocParallel` stays in Imports rather than moving to
+  Suggests: dividing the work is part of what the function does, not an
+  optional extra a user assembles around it.
+  `vignette("hg38_performance_parallel")` measures it across a whole genome.
 
 * **`tm_nn()` now reports GC on the same definition it already used for salt
   correction.** It previously reported `(G+C)/length` while correcting with
@@ -126,9 +180,13 @@
   unchanged: no alphabet restriction, case preserved, sequences named by the
   first word of the header.
 
-* **`BiocParallel` moved from Imports to Suggests.** It was used only by the
-  within-call `BPPARAM` path removed above (see Breaking changes); the
-  parallel vignette and the benchmark scripts still use it.
+* **`BiocParallel` stays in Imports.** It briefly moved to Suggests when the
+  within-call `BPPARAM` path was removed (see Breaking changes), on the
+  reasoning that nothing in the package used it any more. Merging
+  `tm_profile()` into `tm_calculate()` put it back: `.tm_run()` dispatches
+  the tasks of a genome-scale call with `bplapply()`, so dividing the work is
+  something the package does rather than something a user assembles around
+  it, and the dependency is not optional.
 
 * **`BSgenome` moved from Imports to Suggests, cutting load time by about
   two thirds.** Attaching it pulls in rtracklayer, Rsamtools,

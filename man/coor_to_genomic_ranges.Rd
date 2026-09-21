@@ -40,7 +40,9 @@ from \code{sequence}.}
     of its windows in a single \code{extractAt()} call. Recommended for
     dense tiling of one or a few chromosomes (e.g. genome-wide sliding
     windows), where it is several times faster than \code{getSeq()};
-    holds one chromosome in memory at a time.}
+    holds one chromosome in memory at a time. A BSgenome caches the
+    sequences it has loaded, so a second call for the same chromosome
+    does not read it again.}
 }}
 }
 \value{

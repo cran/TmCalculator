@@ -2,7 +2,11 @@
 title: "Genome-wide Melting Temperature Profiling: An E. coli Case Study"
 author: "Junhui Li, Lihua Julie Zhu"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    number_sections: true
 vignette: >
   %\VignetteIndexEntry{Genome-wide Melting Temperature Profiling: An E. coli Case Study}
   %\VignetteEngine{knitr::rmarkdown}
@@ -30,47 +34,56 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-Hasenauer FC, Barreto HC, Lotton C, Matic I (2025). Genome-wide mapping of
-spontaneous DNA replication error-hotspots using mismatch repair proteins in
-rapidly proliferating *Escherichia coli*. *Nucleic Acids Research*
-**53**(2): gkae1196. <doi:10.1093/nar/gkae1196>.
+Spontaneous replication errors are not distributed uniformly along the
+*Escherichia coli* chromosome. Hasenauer *et al.* (2025) located them
+genome-wide by tagging the mismatch-repair protein MutL in rapidly
+proliferating *mutH*-deficient cells, in which a mismatch is recognised but
+cannot be corrected, so that MutL accumulates where errors arise. The
+resulting ChIP-seq peaks, termed MutL-associated regions (MutL-AR), are
+enriched for mononucleotide repeats, cruciform-forming DNA, single-stranded
+DNA and sequences of low thermal stability, and are depleted for GATC
+methylation sites.
 
-Spontaneous DNA replication errors are not randomly distributed along the
-*Escherichia coli* chromosome. Hasenauer *et al.* (2025) mapped these
-hotspots genome-wide by tagging the mismatch-repair protein MutL in rapidly
-proliferating *mutH*-deficient cells, where mismatches can be detected but
-not corrected. MutL ChIP-seq peaks (MutL-associated regions, MutL-AR) are
-enriched for sequences of lower thermal stability, mononucleotide repeats
-(microsatellites), cruciform-forming DNA, and single-stranded DNA, and are
-depleted for GATC methylation sites. These associations motivate a direct
-comparison between replication-error hotspots and local DNA melting
-temperature (Tm).
+The last of those associations is the one pursued here. Low thermal
+stability was inferred in that study from sequence composition; melting
+temperature (Tm) measures it directly, as the temperature at which half the
+duplex is dissociated, computed from nearest-neighbour stacking
+thermodynamics rather than from base content alone. Asking whether MutL-AR
+windows melt at a lower temperature than the rest of the chromosome is
+therefore a test of the proposed mechanism on its own terms, and one that
+needs no new experiment: the genome sequence and the published peak
+coordinates are sufficient.
 
-This vignette uses **TmCalculator** to compute Tm across the *E. coli* K-12
-MG1655 genome (NCBI assembly GCF\_000005845.2 / ASM584v2) for every
-non-overlapping 200 bp window -- the bin size used by Hasenauer *et al.*
-themselves -- then overlays their
-annotation tracks (shipped as `ecoli_rep_hotspots`) to ask whether MutL-AR
-windows differ in Tm and GC content from the rest of the chromosome.
-Because any window-based Tm profile depends on the chosen bandwidth, we
-complement the primary 200 bp analysis with a window-size sensitivity
-analysis (50, 100, 200 and 500 bp windows). Briefly, absolute Tm scales
-with window length as expected from duplex thermodynamics, but the
-spatial landscape is invariant (cross-scale correlations >= 0.975) and
-the MutL-AR association -- about 1 degree C lower median Tm and ~2.7
-percentage points lower GC inside peaks -- is reproduced at every window
-size (all p < 1e-12), so the conclusions do not hinge on the 200 bp
-choice.
+This vignette computes Tm with **TmCalculator** across the *E. coli* K-12
+MG1655 chromosome (NCBI assembly GCF\_000005845.2 / ASM584v2) for every
+non-overlapping 200 bp window, the bin size used by Hasenauer *et al.*
+themselves, and overlays their annotation tracks, which ship with this
+package as `ecoli_rep_hotspots`. Thermodynamic parameters are those of
+Breslauer *et al.* (1986) at 50 mM Na+, again matching the published
+Methods, so that any difference between the two analyses is attributable to
+what is being compared rather than to how Tm was obtained.
 
-The workflow covers five steps:
+Any window-based profile depends on the bandwidth chosen, and 200 bp is a
+choice inherited rather than derived. The primary analysis is therefore
+accompanied by a sensitivity analysis over 50, 100, 200 and 500 bp windows,
+reported in full in `vignette("window_size_sensitivity")`. Absolute Tm
+scales with window length, as duplex thermodynamics requires, but the
+spatial landscape does not: cross-scale correlations are at least 0.975,
+and the MutL-AR association, about 1 degree C lower median Tm and about 2.7
+percentage points lower GC inside peaks, is reproduced at every window size
+tested (all *p* < 1e-12). The conclusions below do not rest on the 200 bp
+bin.
 
-1. **Build a BSgenome data package** from the NCBI assembly accession.
-2. **Generate non-overlapping genomic windows** with `make_genomiccoord()`.
-3. **Compute Tm and GC content** for all windows with `tm_calculate()`.
-4. **Visualise** the genome-wide Tm profile with `plot_genome_track()` —
-   circular plots, linear plots, zoom views, and multi-omics overlays.
-5. **Statistical testing** — compare Tm inside MutL-AR peaks versus the rest
-   of the genome with `compare_groups()`.
+The analysis proceeds in four steps:
+
+1. **Obtain a reference genome** as a BSgenome package: use the one
+   Bioconductor ships for the assembly, or forge one when none exists.
+2. **Compute the Tm profile** for every window with `tm_calculate()`, which
+   tiles the genome, retrieves the sequence and computes Tm in one call.
+3. **Visualise** the profile with `plot_genome_track()`: circular and linear
+   plots, zoomed views, and multi-omics overlays.
+4. **Test** whether Tm inside MutL-AR peaks differs from the rest of the
+   chromosome, with `compare_groups()`.
 
 ---
 
@@ -84,18 +97,32 @@ library(BSgenome)
 library(GenomicRanges)
 ```
 
-## Step 1 — Building the *E. coli* BSgenome data package {#build-bsgenome}
+# The reference genome {#build-bsgenome}
 
-*TmCalculator* retrieves sequences from BSgenome data packages. A prebuilt
-*E. coli* package is available on Bioconductor
-(`BSgenome.Ecoli.NCBI.20080805`), but it is an older multi-strain snapshot
-and does not provide the RefSeq assembly used here
-(GCF_000005845.2, ASM584v2, sequence U00096.3). Because the MutL-AR peaks,
-microsatellite, cruciform, ssDNA, and GATC tracks are all defined against
-this assembly, we forge a matching BSgenome package locally from the NCBI
-RefSeq sequence using **BSgenomeForge**, ensuring that genome sequence and
-feature coordinates share a single reference. This step only needs to be run
-once.
+`tm_calculate()` retrieves sequence from a BSgenome package when you give
+it one, so the first
+question is whether one already exists for your assembly.
+
+**If Bioconductor ships your assembly, use it.** `BSgenome::available.genomes()`
+lists them, and the common references are all there:
+`BSgenome.Hsapiens.UCSC.hg38`, `BSgenome.Mmusculus.UCSC.mm39`,
+`BSgenome.Scerevisiae.UCSC.sacCer3` and so on. Install it and go straight to
+the next section; nothing in this vignette needs the genome to
+have been built by hand.
+
+```{r available-genomes, eval=FALSE}
+BSgenome::available.genomes()          # is your assembly already packaged?
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+```
+
+**Otherwise, forge one.** That is the case here. Bioconductor does ship an
+*E. coli* package, `BSgenome.Ecoli.NCBI.20080805`, but it is an older
+multi-strain snapshot and does not contain the RefSeq assembly this analysis
+needs (GCF_000005845.2, ASM584v2, sequence U00096.3). The MutL-AR peaks and
+the microsatellite, cruciform, ssDNA and GATC tracks are all defined against
+that assembly, so using a different one would silently misplace every
+feature. **BSgenomeForge** builds a matching package from an NCBI accession.
+This is a once-per-assembly step, not a once-per-analysis one.
 
 ```{r forge, eval=FALSE}
 library(BSgenomeForge)
@@ -183,72 +210,67 @@ cat("Length:    ", format(chr_length, big.mark = ","), "bp\n")
 
 ---
 
-# Step 2 — Generate Genomic Windows
+# Compute the genome-wide Tm profile
 
-`make_genomiccoord()` tiles the chromosome into non-overlapping 200 bp bins.
-
-```{r make-coord}
-runtime0 <- system.time({
-  bins_gc <- make_genomiccoord(
-    bsgenome    = genome_name,
-    chromosomes = chr_name,
-    window      = 200L,
-    slide       = 200L,
-    start       = 1,
-    end         = chr_length,
-    strand      = "+"
-  )
-})
-
-cat("Total windows:", length(bins_gc), "\n")
-cat(sprintf("Window generation: %.2f s (elapsed)\n", runtime0["elapsed"]))
-```
-
-Resolve coordinates against the BSgenome package:
-
-```{r coor-to-gr}
-input_new <- list(pkg_name = genome_name, seq = bins_gc)
-runtime1 <- system.time({
-  gr_batch <- to_genomic_ranges_fast(input_new)
-})
-
-cat(sprintf(
-  "Coordinate resolution: %.2f s (elapsed)\n",
-  runtime1["elapsed"]
-))
-```
-
----
-
-# Step 3 — Compute Genome-wide Tm
+`tm_calculate()` does the whole of it in one call: it tiles the requested
+regions, retrieves the sequence for each window, and computes a melting
+temperature for every window. Its first argument is the source the
+sequence comes from, either the name of a BSgenome package as here or the
+path to a FASTA file. It takes a package name rather than a loaded object
+because when the work is spread over several processes each one opens the
+source itself.
 
 We use nearest-neighbour thermodynamics with the Breslauer *et al.* (1986)
 parameter set at 50 mM Na+, matching the Methods of Hasenauer *et al.*
 (2025), who computed Tm with this package and the same parameters.
 
-```{r tm-calculate}
-runtime2 <- system.time({
-  tm_ASM584v2 <- tm_calculate(
-    gr_batch,
+```{r tm-profile}
+runtime <- system.time({
+  tm_ecoli <- tm_calculate(
+    input_seq = genome_name,   # a BSgenome package name, a FASTA path, or sequences
+    regions  = chr_name,     # the whole chromosome; "U00096.3:1-100000" would
+    unit     = "region",     #   tile a sub-region instead
+    window   = 200L,
+    slide    = 200L,         # slide == window gives a non-overlapping tiling
     method   = "tm_nn",
     nn_table = "DNA_NN_Breslauer_1986",
-    Na       = 50            # mM; standard PCR-like conditions
-  )
+    Na       = 50,           # mM; standard PCR-like conditions
+    verbose  = FALSE
+  )$gr                       # $gr is the profile; the object also carries $options
 })
 
 cat(sprintf(
-  "Tm calculation: %.2f s (elapsed) for %s windows\n",
-  runtime2["elapsed"],
-  format(length(bins_gc), big.mark = ",")
+  "Tm profile: %.2f s (elapsed) for %s windows\n",
+  runtime[["elapsed"]], format(length(tm_ecoli), big.mark = ",")
 ))
 
-Tm <- as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")])
+Tm <- as.data.frame(tm_ecoli[, c("Tm", "GC")])
 summary(Tm[, c("Tm", "GC")])
+```
+
+The result is an ordinary `GRanges`, so the coordinates, the melting
+temperatures and the GC percentages travel together through everything
+that follows.
+
+```{r profile-head}
+head(tm_ecoli, 3)
+```
+
+A chromosome of 4.6 Mb is small enough to profile in one process. On a
+mammalian genome the same call takes a `BPPARAM` and spreads the tiles over
+workers; `vignette("hg38_performance_parallel")` covers that, together with
+the forms `regions` accepts and how to choose a worker count.
+
+The same function takes sequences directly, which is the form to use when
+they are already in hand rather than in a genome:
+
+```{r tm-calculate-seqs}
+tm_calculate(c("ACGTGCTAGCTAGCTAGC", "GGCCATATATGCGC"), method = "tm_nn", Na = 50)
 ```
 
 ---
 
-# Step 4 — Visualise with `plot_genome_track()`
+# Visualise with `plot_genome_track()`
 
 `plot_genome_track()` is the unified plotting function in TmCalculator. It
 supports both **linear** (karyoploteR-based) and **circular** (base R graphics)
@@ -432,9 +454,11 @@ does not.
 
 ```{r gc-vs-tm-data}
 ## The GC-content prediction for the same windows, for comparison.
-tm_gc_ecoli <- tm_calculate(gr_batch, method = "tm_gc",
-                            variant = "Schildkraut1965", Na = 50)
-GCmod <- as.data.frame(tm_gc_ecoli$gr[, c("Tm", "GC")])
+tm_gc_ecoli <- tm_calculate(genome_name, regions = chr_name, unit = "region",
+                            window = 200L, slide = 200L,
+                            method = "tm_gc", variant = "Schildkraut1965",
+                            Na = 50, verbose = FALSE)$gr
+GCmod <- as.data.frame(tm_gc_ecoli[, c("Tm", "GC")])
 
 ## Keep only windows whose GC percentage is an exact integer. A 200 bp
 ## window can only take GC values in steps of 0.5%, so binning 49.5% with
@@ -448,7 +472,7 @@ prep <- function(d) {
   d$GCi <- as.integer(d$GC)
   d
 }
-Cnn <- prep(as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")]))
+Cnn <- prep(as.data.frame(tm_ecoli[, c("Tm", "GC")]))
 Cgc <- prep(GCmod)
 
 cnt <- table(Cnn$GCi)
@@ -507,148 +531,35 @@ separate question from the one this panel asks. The claim here concerns the
 spread at fixed GC, which is a property of the sequences and does not depend
 on where either scale is anchored.
 
-## Finding a locus that shows it
+## One locus, for the manuscript figure
 
-The distribution above says the effect exists across the genome. To see it
-in one place, scan for the locus in which two windows of exactly equal GC
-content are furthest apart in Tm, then zoom to it.
+The distribution above says the effect holds across the genome. Seeing it in
+a single place takes a search: score every 20 kb locus by how far apart its
+equal-GC windows are in Tm, and take the best one. That search, and the
+three-panel figure it feeds (Figure 3 of the manuscript), are in
+`inst/scripts/make_figure3.R`, which is shipped with the package:
 
-```{r find-locus}
-W <- as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")])
-W <- W[!is.na(W$Tm) & !is.na(W$GC) & W$width == 200L, ]
-W <- W[order(W$start), ]
-
-## Which windows lie inside a MutL-AR peak. Matched on coordinates alone:
-## the peak table and the window table both describe one contig, and
-## matching on sequence names would fail silently if one calls it by the
-## accession and the other by the genome package name.
-peaks <- as.data.frame(ecoli_rep_hotspots$all_peaks_IP_mutH)
-W$in_peak <- IRanges::overlapsAny(
-  IRanges::IRanges(W$start, W$end),
-  IRanges::IRanges(as.numeric(peaks$start), as.numeric(peaks$end)))
-
-## The k GC values inside a locus whose windows are furthest apart in Tm.
-## Each group contributes its two extreme windows; shading every window at
-## that GC would fill the panel with stripes and hide the tracks.
-top_groups <- function(d, k = 3L) {
-  g  <- split(seq_len(nrow(d)), d$GC)
-  g  <- g[lengths(g) >= 2L]
-  if (!length(g)) return(list())
-  sp <- vapply(g, function(ix) diff(range(d$Tm[ix])), numeric(1))
-  o  <- order(sp, decreasing = TRUE)[seq_len(min(k, length(g)))]
-  lapply(o, function(j) {
-    ix <- g[[j]]
-    list(gc = as.numeric(names(g)[j]), spread = unname(sp[j]),
-         rows = ix[c(which.min(d$Tm[ix]), which.max(d$Tm[ix]))])
-  })
-}
-
-n_loc  <- 100L                       # 100 x 200 bp = 20 kb
-starts <- seq_len(nrow(W) - n_loc + 1L)
-
-## Two restrictions on the candidate loci.
-##
-## Contiguity: a locus is n_loc consecutive ROWS of W, and W has had short
-## and ambiguous windows dropped, so consecutive rows need not be adjacent
-## on the chromosome. A locus spanning such a gap would be drawn with an
-## axis covering far more than 20 kb and would quietly stop being a zoom.
-##
-## Peaks: the panel is meant to say something about the regions this study
-## is about, not only about the model, so only loci centred on a MutL-AR
-## peak are considered.
-contig <- (W$start[seq(n_loc, nrow(W))] - W$start[starts]) == (n_loc - 1L) * 200L
-starts <- starts[contig]
-starts <- starts[W$in_peak[pmin(starts + n_loc %/% 2L, nrow(W))]]
-
-## Scored on the SUM of the top three spreads rather than the single best
-## one: a locus with one spectacular pair and nothing around it reads as a
-## peculiar sequence, whereas three groups at three GC values read as a
-## property of the model.
-sc <- vapply(starts, function(i)
-  sum(vapply(top_groups(W[i:(i + n_loc - 1L), ]), function(g) g$spread,
-             numeric(1))), numeric(1))
-
-i0 <- starts[which.max(sc)]
-d  <- W[i0:(i0 + n_loc - 1L), ]
-gs <- top_groups(d)
-
-do.call(rbind, lapply(gs, function(g)
-  data.frame(GC = g$gc, Tm_low = min(d$Tm[g$rows]), Tm_high = max(d$Tm[g$rows]),
-             difference = g$spread)))
+```{r make-figure3, eval=FALSE}
+script <- system.file("scripts", "make_figure3.R", package = "TmCalculator")
+file.edit(script)      # --locus-kb, --n-groups, --pairs-in-peaks, --dpi
 ```
 
-```{r zoom-locus, fig.width=9, fig.height=4.5, fig.cap="High-magnification view of a 20 kb locus centred on a MutL-AR peak. Three pairs of windows are shaded, one pair per colour; the two windows of a pair have identical length and identical GC content and differ only in the arrangement of their bases. Yellow marks the MutL-AR peaks. Only the GC and Tm tracks are drawn: seven tracks in one linear panel leave each of them too little height to read at this scale."}
-grp_cols <- c("#B7791F", "#2E8B57", "#7D3C98")
-
-tracks_zoom <- c(
-  list(
-    ## The MutL-AR peaks are drawn as the ideogram, in the same black used
-    ## in the whole-genome map, so the three panels agree on what a peak
-    ## looks like. As the ideogram it also names the chromosome bar, which
-    ## is why `genome_name` below is the track name rather than the contig.
-    list(type = "rect", data = ecoli_rep_hotspots$all_peaks_IP_mutH,
-         col = "black", bg.col = "grey", name = "MutL-AR",
-         legend_font_col = "black", ideogram = TRUE, height = 0.5),
-    list(type = "line", data = Tm, value_col = "GC", name = "GC",
-         col = "#4A90E2", legend_font_col = "#4A90E2", height = 1),
-    list(type = "line", data = Tm, value_col = "Tm", name = "Tm",
-         col = "#E06666", legend_font_col = "#E06666", height = 1.4),
-    list(type = "highlight", data = ecoli_rep_hotspots$all_peaks_IP_mutH,
-         col = "#F1C40F", alpha = 0.18)),
-  lapply(seq_along(gs), function(i)
-    list(type = "highlight", data = d[gs[[i]]$rows, c("seqnames", "start", "end")],
-         col = grp_cols[i], alpha = 0.40)))
-
-plot_genome_track(
-  genome_name = "MutL-AR",
-  genome_size = chr_length,
-  track_list  = tracks_zoom,
-  zoom        = sprintf("%s:%d-%d", chr_name, min(d$start), max(d$end)),
-  track.gap   = 0.06,
-  axis.cex    = 0.8,
-  legend.show = FALSE,
-  ## Without this the panel carries no base positions at all: the default
-  ## tick spacing is 500 kb for any view under 10 Mb, which places no tick
-  ## inside a 20 kb window.
-  base.tick.dist  = 5000,
-  base.tick.units = TRUE
-)
-
-## plot_genome_track() drops highlight entries before building its legend,
-## so the shaded groups would otherwise be unlabelled.
-legend("topright", bty = "n", cex = 0.8, border = NA,
-       legend = c("GC", "Tm", "MutL-AR peak",
-                  vapply(gs, function(g)
-                    sprintf("GC %.1f%%:  Tm %.1f-%.1f", g$gc,
-                            min(d$Tm[g$rows]), max(d$Tm[g$rows])),
-                    character(1))),
-       fill = c("#4A90E2", "#E06666",
-                adjustcolor("#F1C40F", alpha.f = 0.18),
-                adjustcolor(grp_cols, alpha.f = 0.40)),
-       text.col = c("#4A90E2", "#E06666", "#B7950B", grp_cols))
-```
-
-The GC track is flat across each shaded pair and the Tm track is not. That
-is the whole argument for a nearest-neighbour model in one picture, and it
-is the panel used as Figure 2C in the manuscript; the combined three-panel
-figure is produced by `inst/scripts/make_figure2.R`.
-
-Two caveats worth stating plainly. This locus was selected *because* it is
-extreme, so it shows a large effect rather than a typical one; the box plot
-above is the honest summary and the two belong together. And the pairs are
-extreme within the locus but need not both lie inside a peak: the search
-places the locus on a peak, not every shaded window. Requiring both windows
-of a pair to be inside a peak is one argument away in
-`inst/scripts/make_figure2.R` (`--pairs-in-peaks`) and lowers the effect.
+The panel it produces shows a flat GC track across each shaded pair of
+windows and a Tm track that is not, which is the argument for a
+nearest-neighbour model in one picture. Two caveats belong with it: the
+locus is chosen *because* it is extreme, so the box plot above is the honest
+summary of typical behaviour; and the pairs are extreme within the locus but
+need not both fall inside a peak, which `--pairs-in-peaks` enforces at the
+cost of a smaller effect.
 
 ---
 
-# Step 5 — Statistical Testing
+# Statistical testing
 
 We test whether Tm values inside MutL-AR peaks differ significantly from the
 rest of the genome.
 
-### Build MutL-AR peak GRanges
+## Build MutL-AR peak GRanges
 
 ```{r build-mutH-peaks}
 mutH_peaks <- GRanges(
@@ -659,13 +570,13 @@ mutH_peaks <- GRanges(
 seqlevels(mutH_peaks) <- "U00096.3"
 ```
 
-### Annotate Tm tiles with peak membership
+## Annotate Tm tiles with peak membership
 
 ```{r annotate-mutH-peaks}
 mutH_peaks$peak_id <- paste0("mutH_", seq_along(mutH_peaks))
 
 tm_annot <- integrate_granges(
-  gr_tm          = tm_ASM584v2$gr,
+  gr_tm          = tm_ecoli,
   gr_features    = mutH_peaks,
   strategy       = "overlap",
   feature_cols   = "peak_id",
@@ -676,7 +587,7 @@ tm_annot$in_mutH <- ifelse(is.na(tm_annot$peak_id), "non_peak", "peak")
 table(tm_annot$in_mutH)
 ```
 
-### Wilcoxon test on Tm and GC
+## Wilcoxon test on Tm and GC
 
 ```{r wilcoxon}
 res <- compare_groups(
@@ -716,10 +627,24 @@ On a standard desktop computer (single core, R 4.4, compiled Rcpp nearest-neighb
 
 | Step | Function | Time (elapsed) |
 |------|----------|---------------|
-| Window generation | `make_genomiccoord()` | ~`r sprintf("%.2f", runtime0["elapsed"])` s |
-| Sequence extraction | `to_genomic_ranges_fast()` | ~`r sprintf("%.2f", runtime1["elapsed"])` s |
-| Tm calculation (23,208 windows) | `tm_calculate()` | ~`r sprintf("%.2f", runtime2["elapsed"])` s |
-| **Total** | | **~`r sprintf("%.2f", runtime0["elapsed"] + runtime1["elapsed"] + runtime2["elapsed"])` s** |
+| Tiling, sequence retrieval and Tm for 23,208 windows | `tm_calculate()` | ~`r sprintf("%.2f", runtime[["elapsed"]])` s |
+
+The same call on the human genome, where there are 14.7 million windows
+rather than 23,208, takes about ten minutes in one process and about three
+minutes over five workers; see `vignette("hg38_performance_parallel")`.
+
+---
+
+# References
+
+Breslauer KJ, Frank R, Blocker H, Marky LA (1986). Predicting DNA duplex
+stability from the base sequence. *Proceedings of the National Academy of
+Sciences USA* **83**(11): 3746-3750. <doi:10.1073/pnas.83.11.3746>
+
+Hasenauer FC, Barreto HC, Lotton C, Matic I (2025). Genome-wide mapping of
+spontaneous DNA replication error-hotspots using mismatch repair proteins in
+rapidly proliferating *Escherichia coli*. *Nucleic Acids Research*
+**53**(2): gkae1196. <doi:10.1093/nar/gkae1196>
 
 ---
 

@@ -21,6 +21,10 @@ library(TmCalculator)
 library(BSgenome)
 library(GenomicRanges)
 
+## ----available-genomes, eval=FALSE--------------------------------------------
+# BSgenome::available.genomes()          # is your assembly already packaged?
+# BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+
 ## ----forge, eval=FALSE--------------------------------------------------------
 # library(BSgenomeForge)
 # 
@@ -95,51 +99,34 @@ chr_length  <- length(genome[[chr_name]])
 cat("Chromosome:", chr_name, "\n")
 cat("Length:    ", format(chr_length, big.mark = ","), "bp\n")
 
-## ----make-coord---------------------------------------------------------------
-runtime0 <- system.time({
-  bins_gc <- make_genomiccoord(
-    bsgenome    = genome_name,
-    chromosomes = chr_name,
-    window      = 200L,
-    slide       = 200L,
-    start       = 1,
-    end         = chr_length,
-    strand      = "+"
-  )
-})
-
-cat("Total windows:", length(bins_gc), "\n")
-cat(sprintf("Window generation: %.2f s (elapsed)\n", runtime0["elapsed"]))
-
-## ----coor-to-gr---------------------------------------------------------------
-input_new <- list(pkg_name = genome_name, seq = bins_gc)
-runtime1 <- system.time({
-  gr_batch <- to_genomic_ranges_fast(input_new)
-})
-
-cat(sprintf(
-  "Coordinate resolution: %.2f s (elapsed)\n",
-  runtime1["elapsed"]
-))
-
-## ----tm-calculate-------------------------------------------------------------
-runtime2 <- system.time({
-  tm_ASM584v2 <- tm_calculate(
-    gr_batch,
+## ----tm-profile---------------------------------------------------------------
+runtime <- system.time({
+  tm_ecoli <- tm_calculate(
+    input_seq = genome_name,   # a BSgenome package name, a FASTA path, or sequences
+    regions  = chr_name,     # the whole chromosome; "U00096.3:1-100000" would
+    unit     = "region",     #   tile a sub-region instead
+    window   = 200L,
+    slide    = 200L,         # slide == window gives a non-overlapping tiling
     method   = "tm_nn",
     nn_table = "DNA_NN_Breslauer_1986",
-    Na       = 50            # mM; standard PCR-like conditions
-  )
+    Na       = 50,           # mM; standard PCR-like conditions
+    verbose  = FALSE
+  )$gr                       # $gr is the profile; the object also carries $options
 })
 
 cat(sprintf(
-  "Tm calculation: %.2f s (elapsed) for %s windows\n",
-  runtime2["elapsed"],
-  format(length(bins_gc), big.mark = ",")
+  "Tm profile: %.2f s (elapsed) for %s windows\n",
+  runtime[["elapsed"]], format(length(tm_ecoli), big.mark = ",")
 ))
 
-Tm <- as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")])
+Tm <- as.data.frame(tm_ecoli[, c("Tm", "GC")])
 summary(Tm[, c("Tm", "GC")])
+
+## ----profile-head-------------------------------------------------------------
+head(tm_ecoli, 3)
+
+## ----tm-calculate-seqs--------------------------------------------------------
+tm_calculate(c("ACGTGCTAGCTAGCTAGC", "GGCCATATATGCGC"), method = "tm_nn", Na = 50)
 
 ## ----track-list---------------------------------------------------------------
 # Reference labels: replication origin (ori) and terminus (dif)
@@ -252,9 +239,11 @@ plot_genome_track(
 
 ## ----gc-vs-tm-data------------------------------------------------------------
 ## The GC-content prediction for the same windows, for comparison.
-tm_gc_ecoli <- tm_calculate(gr_batch, method = "tm_gc",
-                            variant = "Schildkraut1965", Na = 50)
-GCmod <- as.data.frame(tm_gc_ecoli$gr[, c("Tm", "GC")])
+tm_gc_ecoli <- tm_calculate(genome_name, regions = chr_name, unit = "region",
+                            window = 200L, slide = 200L,
+                            method = "tm_gc", variant = "Schildkraut1965",
+                            Na = 50, verbose = FALSE)$gr
+GCmod <- as.data.frame(tm_gc_ecoli[, c("Tm", "GC")])
 
 ## Keep only windows whose GC percentage is an exact integer. A 200 bp
 ## window can only take GC values in steps of 0.5%, so binning 49.5% with
@@ -268,7 +257,7 @@ prep <- function(d) {
   d$GCi <- as.integer(d$GC)
   d
 }
-Cnn <- prep(as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")]))
+Cnn <- prep(as.data.frame(tm_ecoli[, c("Tm", "GC")]))
 Cgc <- prep(GCmod)
 
 cnt <- table(Cnn$GCi)
@@ -304,118 +293,9 @@ legend("topleft", bty = "n", cex = 0.85,
        col = c("#34495E", "#C0392B"), lwd = c(0.7, 2.2), seg.len = 1.4)
 par(op)
 
-## ----find-locus---------------------------------------------------------------
-W <- as.data.frame(tm_ASM584v2$gr[, c("Tm", "GC")])
-W <- W[!is.na(W$Tm) & !is.na(W$GC) & W$width == 200L, ]
-W <- W[order(W$start), ]
-
-## Which windows lie inside a MutL-AR peak. Matched on coordinates alone:
-## the peak table and the window table both describe one contig, and
-## matching on sequence names would fail silently if one calls it by the
-## accession and the other by the genome package name.
-peaks <- as.data.frame(ecoli_rep_hotspots$all_peaks_IP_mutH)
-W$in_peak <- IRanges::overlapsAny(
-  IRanges::IRanges(W$start, W$end),
-  IRanges::IRanges(as.numeric(peaks$start), as.numeric(peaks$end)))
-
-## The k GC values inside a locus whose windows are furthest apart in Tm.
-## Each group contributes its two extreme windows; shading every window at
-## that GC would fill the panel with stripes and hide the tracks.
-top_groups <- function(d, k = 3L) {
-  g  <- split(seq_len(nrow(d)), d$GC)
-  g  <- g[lengths(g) >= 2L]
-  if (!length(g)) return(list())
-  sp <- vapply(g, function(ix) diff(range(d$Tm[ix])), numeric(1))
-  o  <- order(sp, decreasing = TRUE)[seq_len(min(k, length(g)))]
-  lapply(o, function(j) {
-    ix <- g[[j]]
-    list(gc = as.numeric(names(g)[j]), spread = unname(sp[j]),
-         rows = ix[c(which.min(d$Tm[ix]), which.max(d$Tm[ix]))])
-  })
-}
-
-n_loc  <- 100L                       # 100 x 200 bp = 20 kb
-starts <- seq_len(nrow(W) - n_loc + 1L)
-
-## Two restrictions on the candidate loci.
-##
-## Contiguity: a locus is n_loc consecutive ROWS of W, and W has had short
-## and ambiguous windows dropped, so consecutive rows need not be adjacent
-## on the chromosome. A locus spanning such a gap would be drawn with an
-## axis covering far more than 20 kb and would quietly stop being a zoom.
-##
-## Peaks: the panel is meant to say something about the regions this study
-## is about, not only about the model, so only loci centred on a MutL-AR
-## peak are considered.
-contig <- (W$start[seq(n_loc, nrow(W))] - W$start[starts]) == (n_loc - 1L) * 200L
-starts <- starts[contig]
-starts <- starts[W$in_peak[pmin(starts + n_loc %/% 2L, nrow(W))]]
-
-## Scored on the SUM of the top three spreads rather than the single best
-## one: a locus with one spectacular pair and nothing around it reads as a
-## peculiar sequence, whereas three groups at three GC values read as a
-## property of the model.
-sc <- vapply(starts, function(i)
-  sum(vapply(top_groups(W[i:(i + n_loc - 1L), ]), function(g) g$spread,
-             numeric(1))), numeric(1))
-
-i0 <- starts[which.max(sc)]
-d  <- W[i0:(i0 + n_loc - 1L), ]
-gs <- top_groups(d)
-
-do.call(rbind, lapply(gs, function(g)
-  data.frame(GC = g$gc, Tm_low = min(d$Tm[g$rows]), Tm_high = max(d$Tm[g$rows]),
-             difference = g$spread)))
-
-## ----zoom-locus, fig.width=9, fig.height=4.5, fig.cap="High-magnification view of a 20 kb locus centred on a MutL-AR peak. Three pairs of windows are shaded, one pair per colour; the two windows of a pair have identical length and identical GC content and differ only in the arrangement of their bases. Yellow marks the MutL-AR peaks. Only the GC and Tm tracks are drawn: seven tracks in one linear panel leave each of them too little height to read at this scale."----
-grp_cols <- c("#B7791F", "#2E8B57", "#7D3C98")
-
-tracks_zoom <- c(
-  list(
-    ## The MutL-AR peaks are drawn as the ideogram, in the same black used
-    ## in the whole-genome map, so the three panels agree on what a peak
-    ## looks like. As the ideogram it also names the chromosome bar, which
-    ## is why `genome_name` below is the track name rather than the contig.
-    list(type = "rect", data = ecoli_rep_hotspots$all_peaks_IP_mutH,
-         col = "black", bg.col = "grey", name = "MutL-AR",
-         legend_font_col = "black", ideogram = TRUE, height = 0.5),
-    list(type = "line", data = Tm, value_col = "GC", name = "GC",
-         col = "#4A90E2", legend_font_col = "#4A90E2", height = 1),
-    list(type = "line", data = Tm, value_col = "Tm", name = "Tm",
-         col = "#E06666", legend_font_col = "#E06666", height = 1.4),
-    list(type = "highlight", data = ecoli_rep_hotspots$all_peaks_IP_mutH,
-         col = "#F1C40F", alpha = 0.18)),
-  lapply(seq_along(gs), function(i)
-    list(type = "highlight", data = d[gs[[i]]$rows, c("seqnames", "start", "end")],
-         col = grp_cols[i], alpha = 0.40)))
-
-plot_genome_track(
-  genome_name = "MutL-AR",
-  genome_size = chr_length,
-  track_list  = tracks_zoom,
-  zoom        = sprintf("%s:%d-%d", chr_name, min(d$start), max(d$end)),
-  track.gap   = 0.06,
-  axis.cex    = 0.8,
-  legend.show = FALSE,
-  ## Without this the panel carries no base positions at all: the default
-  ## tick spacing is 500 kb for any view under 10 Mb, which places no tick
-  ## inside a 20 kb window.
-  base.tick.dist  = 5000,
-  base.tick.units = TRUE
-)
-
-## plot_genome_track() drops highlight entries before building its legend,
-## so the shaded groups would otherwise be unlabelled.
-legend("topright", bty = "n", cex = 0.8, border = NA,
-       legend = c("GC", "Tm", "MutL-AR peak",
-                  vapply(gs, function(g)
-                    sprintf("GC %.1f%%:  Tm %.1f-%.1f", g$gc,
-                            min(d$Tm[g$rows]), max(d$Tm[g$rows])),
-                    character(1))),
-       fill = c("#4A90E2", "#E06666",
-                adjustcolor("#F1C40F", alpha.f = 0.18),
-                adjustcolor(grp_cols, alpha.f = 0.40)),
-       text.col = c("#4A90E2", "#E06666", "#B7950B", grp_cols))
+## ----make-figure3, eval=FALSE-------------------------------------------------
+# script <- system.file("scripts", "make_figure3.R", package = "TmCalculator")
+# file.edit(script)      # --locus-kb, --n-groups, --pairs-in-peaks, --dpi
 
 ## ----build-mutH-peaks---------------------------------------------------------
 mutH_peaks <- GRanges(
@@ -429,7 +309,7 @@ seqlevels(mutH_peaks) <- "U00096.3"
 mutH_peaks$peak_id <- paste0("mutH_", seq_along(mutH_peaks))
 
 tm_annot <- integrate_granges(
-  gr_tm          = tm_ASM584v2$gr,
+  gr_tm          = tm_ecoli,
   gr_features    = mutH_peaks,
   strategy       = "overlap",
   feature_cols   = "peak_id",

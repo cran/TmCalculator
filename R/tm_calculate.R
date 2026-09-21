@@ -133,16 +133,35 @@
 #'   \item \code{mismatch}: TRUE/FALSE (default: TRUE)
 #' }
 #' 
-#' @param input_seq Input sequence(s) in 5' to 3' direction. Can be provided as either:
-#'   - A character string (e.g., "ATGCG")
-#'   - A path to a FASTA file containing the sequence(s)
-#'   - A GRanges object with sequence and complement metadata should be provided if mismatch is TRUE
-#'   - A character vector where each element is a string in the format "chr:start-end:strand:species" (e.g., "chr1:100-200:+:BSgenome.Hsapiens.UCSC.hg38"). Strand is "+" for positive (default if not provided) or "-" for negative.
-#'     - chr: Chromosome ID
-#'     - start: Start position
-#'     - end: End position
-#'     - strand: positive or negtive strand
-#'     - species:  Species name for reference genome (e.g., "BSgenome.Hsapiens.UCSC.hg38"), see \code{BSgenome::available.genomes()} for all available genomes. please make sure the genome package is installed, otherwise the function will stop.
+#' @param input_seq Where the sequence comes from. One of:
+#'   \itemize{
+#'     \item \strong{Sequences}, as a character vector in 5' to 3' direction,
+#'       e.g. \code{c("ATGCG", "GGCCA")}. Names, when present, become the
+#'       \code{seqnames} of the result; unnamed sequences are keyed by their
+#'       position in the vector.
+#'     \item \strong{An installed BSgenome package}, by name, e.g.
+#'       \code{"BSgenome.Hsapiens.UCSC.hg38"}. It is named rather than passed
+#'       as a loaded object because each worker opens the genome for itself,
+#'       so no sequence crosses between processes. See
+#'       \code{BSgenome::available.genomes()} for what exists, and install the
+#'       package before calling.
+#'     \item \strong{A FASTA file}, by path; gzipped files are read directly.
+#'     \item \strong{A \code{GRanges}} carrying a \code{sequence} metadata
+#'       column. The complement is derived from it when absent.
+#'   }
+#'   \code{regions} selects from any of the four, and means the same thing in
+#'   each: the identifier before the colon is resolved against whatever names
+#'   the source itself offers, and falls back to position. A BSgenome or a
+#'   FASTA file with no \code{regions} is taken whole, which for a genome
+#'   means its standard chromosomes.
+#'
+#'   Also accepted, and unchanged from earlier versions: a character vector of
+#'   coordinate strings \code{"chr:start-end:strand:species"}, for example
+#'   \code{"chr1:100-200:+:BSgenome.Hsapiens.UCSC.hg38"}, where strand
+#'   defaults to \code{"+"}. This form carries its own genome in every
+#'   element, so it is read directly and ignores \code{regions}; to profile
+#'   coordinates against a genome, prefer passing the genome here and the
+#'   coordinates as \code{regions}.
 #' 
 #' @param complement_seq Complementary sequence(s) in 3' to 5' direction. If not provided,
 #'   the function will automatically generate it from input_seq. This is the template/target
@@ -258,6 +277,53 @@
 #' @param mismatch Logical. If TRUE, every '.' in the sequence is counted as a mismatch.
 #'   Only applicable for the GC method. Default: TRUE
 #'
+#' @param regions What to take from \code{input_seq}. \code{NULL}, the
+#'   default, means all of it, except for a \pkg{BSgenome}, where it means
+#'   \code{GenomeInfoDb::standardChromosomes()} of that genome, which for
+#'   GRCh38 includes chrM. Otherwise: names or numbers
+#'   (\code{c("chr1", "chr2")}, \code{1:2}), coordinate strings
+#'   \code{"name:start-end"} with commas and scientific notation accepted
+#'   (\code{"chr1:5,000,000-6e6"}), a mixture of the two, or a
+#'   \code{GRanges}.
+#'
+#'   The identifier before the colon is resolved against whatever names the
+#'   source itself offers, and falls back to position. So \code{"chr1"} is a
+#'   chromosome in a \pkg{BSgenome}, a record in a FASTA file and a
+#'   \code{seqname} in a \code{GRanges}, and \code{"1:1-200"} is the first
+#'   200 bases of the first sequence in an unnamed character vector. On a
+#'   \pkg{BSgenome} the \code{chr} prefix is added or removed as the genome
+#'   requires, since that is a convention rather than information; elsewhere
+#'   names are matched exactly.
+#' @param window Window width in base pairs. \code{NULL}, the default, gives
+#'   one melting temperature per region, which is what short records such as
+#'   probes, primers and oligonucleotides call for; a region longer than 1 Mb
+#'   with \code{window = NULL} is an error rather than one meaningless Tm.
+#'   Regions shorter than \code{window} are returned whole.
+#' @param slide Step between window starts, defaulting to \code{window} for a
+#'   non-overlapping tiling. Ignored when \code{window} is \code{NULL}.
+#' @param unit How regions become tasks: \code{"segment"} cuts them into
+#'   pieces of about \code{segment_size} bp, \code{"region"} makes one task
+#'   per region. Segments are faster and need less memory per worker, because
+#'   no worker then holds a whole large chromosome.
+#' @param segment_size Task size in base pairs when \code{unit = "segment"},
+#'   rounded down to a multiple of \code{slide} so that the window grid is
+#'   the one an unsegmented run would produce. Default 50 Mb.
+#' @param BPPARAM A \code{BiocParallelParam} from \pkg{BiocParallel}, e.g.
+#'   \code{SnowParam(workers = 5)}, to spread the tasks over processes.
+#'   \code{NULL}, the default, runs them here, with no dependency on
+#'   \pkg{BiocParallel}. Parallelism divides the work by region, never the
+#'   sequences of one region: each task opens the source itself, so only a
+#'   name and a coordinate pair cross between processes.
+#' @param keep_sequence Keep the \code{sequence} and \code{complement}
+#'   columns. The default keeps them for sequences the caller supplied and
+#'   drops them for a genome or a file, where they run to roughly 500 MB per
+#'   large chromosome.
+#' @param tmpdir Directory for the temporary FASTA file written when
+#'   sequences are supplied directly and there is tiling or parallelism to
+#'   do. Worth setting on a cluster, where \code{tempdir()} is often a small
+#'   partition.
+#' @param verbose Report the task and window counts.
+#'
 #' @details
 #' The three methods differ in resolution and in the range of sequence lengths
 #' over which they are calibrated, so they are not interchangeable.
@@ -318,6 +384,25 @@
 #'   nn_table = "RNA_DNA_NN_Weber_2019_LS",
 #'   Na = 100
 #' )
+#'
+#' # Genome scale. The source is named rather than loaded, because each
+#' # worker opens it for itself; `regions` says what to cover and `window`
+#' # says at what resolution.
+#' hg38 <- "BSgenome.Hsapiens.UCSC.hg38"
+#' tm_calculate(hg38, regions = "chr21:10e6-20e6", window = 200, slide = 200)
+#'
+#' # Five processes. Tasks are divided by region, never by splitting the
+#' # sequences of one region, so only coordinates cross between them.
+#' library(BiocParallel)
+#' whole <- tm_calculate(hg38, window = 200, slide = 200,
+#'                       BPPARAM = SnowParam(workers = 5))
+#' whole$gr
+#'
+#' # The same, for a FASTA file and for sequences already in R. With
+#' # window = NULL, the default, each record returns a single Tm, which is
+#' # what a file of probes or primers calls for.
+#' tm_calculate("probes.fa", BPPARAM = SnowParam(workers = 4))
+#' tm_calculate(c("ACGTGCTAGCTAGCTAGC", "GGCCATATATGCGC"))
 #' }
 #'
 #' @seealso \code{\link{tm_nn}} for the nearest-neighbor method and the full
@@ -392,82 +477,205 @@ tm_calculate <- function(input_seq,
                         formamide_unit = list(value = 0, unit = "percent"),
                         dmso_factor = 0.75,
                         formamide_factor = 0.65,
-                        mismatch = TRUE) {
-  # Validate method argument
-  method <- match.arg(method, several.ok = FALSE)
-
-  # Validate salt_method once and pass a scalar down. Without this, the
-  # full default candidate vector reached tm_gc(), whose own match.arg()
-  # (which has no "none" choice) then failed with "'arg' must be of
-  # length 1" for any tm_gc call relying on defaults.
+                        mismatch = TRUE,
+                        regions = NULL,
+                        window = NULL,
+                        slide = window,
+                        unit = c("segment", "region"),
+                        segment_size = 50e6,
+                        BPPARAM = NULL,
+                        keep_sequence = NULL,
+                        tmpdir = tempdir(),
+                        verbose = FALSE) {
+  method      <- match.arg(method, several.ok = FALSE)
+  unit        <- match.arg(unit)
+  # Validated once and passed down as a scalar. Without this the full default
+  # candidate vector reached tm_gc(), whose own match.arg() has no "none"
+  # choice and failed with "'arg' must be of length 1" for any tm_gc call
+  # relying on defaults.
   salt_method <- match.arg(salt_method)
-  
-  # convert input_seq to genomic ranges
-  if (inherits(input_seq, "GRanges")) {
-    gr <- input_seq
-  } else {  
-    gr <- to_genomic_ranges(input_seq=input_seq, complement_seq = complement_seq)
+
+  # Everything that describes the thermodynamic model and nothing that
+  # describes where the sequence comes from. Each task hands this back to
+  # tm_calculate(), so it must not carry regions, window or BPPARAM: those
+  # would make the call recurse instead of compute.
+  model <- list(method = method, ambiguous = ambiguous, shift = shift,
+                nn_table = nn_table, tmm_table = tmm_table,
+                imm_table = imm_table, de_table = de_table,
+                dnac_high = dnac_high, dnac_low = dnac_low,
+                self_comp = self_comp, Na = Na, K = K, Tris = Tris, Mg = Mg,
+                dNTPs = dNTPs, userset = userset, variant = variant,
+                salt_method = salt_method, DMSO = DMSO,
+                formamide_unit = formamide_unit, dmso_factor = dmso_factor,
+                formamide_factor = formamide_factor, mismatch = mismatch)
+
+  # -- the direct route -------------------------------------------------------
+  # Sequences already in hand, nothing to tile, one process. This is what the
+  # function has always done for a character vector or a GRanges, and it stays
+  # the shortest path through it: no temporary file, no task machinery.
+  a_source <- is.character(input_seq) && length(input_seq) == 1L &&
+    ((file.exists(input_seq) && !dir.exists(input_seq)) ||
+       requireNamespace(input_seq, quietly = TRUE))
+  if (!a_source && is.null(regions) && is.null(window) && is.null(BPPARAM)) {
+    gr <- if (methods::is(input_seq, "GRanges")) .tm_complete_gr(input_seq)
+          else to_genomic_ranges(input_seq = input_seq,
+                                 complement_seq = complement_seq)
+    return(.tm_model(gr, model))
   }
 
-  # check and filter the sequence
-  #gr$sequence <- check_filter_seq(gr$sequence, method)
-  #gr$complement <- check_filter_seq(gr$complement, method)
+  # -- the profiling route ----------------------------------------------------
+  src <- .tm_source(input_seq, complement_seq)
+  if (is.null(keep_sequence))
+    # Worth keeping for sequences the caller already had; ruinous for a
+    # genome, where the columns run to about 500 MB per large chromosome.
+    keep_sequence <- src$kind %in% c("sequences", "granges")
 
-  # Calculate Tm using each selected method
-  if ("tm_nn" %in% method) {
-    result <- tm_nn(
-      gr_seq = gr,
-      ambiguous = ambiguous,
-      shift = shift,
-      nn_table = nn_table,
-      tmm_table = tmm_table,
-      imm_table = imm_table,
-      de_table = de_table,
-      dnac_high = dnac_high,
-      dnac_low = dnac_low,
-      self_comp = self_comp,
-      Na = Na,
-      K = K,
-      Tris = Tris,
-      Mg = Mg,
-      dNTPs = dNTPs,
-      salt_method = salt_method,
-      DMSO = DMSO,
-      formamide_unit = formamide_unit,
-      dmso_factor = dmso_factor,
-      formamide_factor = formamide_factor
-    )
+  # Resolved against the source the caller gave, not against the staged copy
+  # below. `regions` names the caller's own sequences, and those names do not
+  # always survive staging: a GRanges with two ranges on chr1 cannot put
+  # "chr1" on two FASTA records, where a record name has to identify one
+  # record. Resolving first also means a GRanges source is selected by
+  # overlap, which is what having coordinates makes possible.
+  req <- .tm_regions(regions, src)
+
+  if (src$kind %in% c("sequences", "granges")) {
+    # Staged to a file so that the workers read the sequences rather than
+    # receive them, which is what moves window construction and result
+    # assembly into the worker as well. Serially this costs one write and one
+    # read; in parallel it replaces a serialisation that costs more.
+    seqs <- if (src$kind == "granges")
+      stats::setNames(as.character(GenomicRanges::mcols(src$gr)$sequence),
+                      as.character(GenomeInfoDb::seqnames(src$gr)))
+      else src$seqs
+    path <- .spill_fasta(seqs, tmpdir)
+    on.exit(unlink(path), add = TRUE)
+    # Records are written in input order, so req$idx still addresses the
+    # right one; req$name keeps the caller's name for the output.
+    src  <- .tm_source(path)
   }
 
-  if ("tm_gc" %in% method) {
-    result <- tm_gc(
-      gr_seq = gr,
-      ambiguous = ambiguous,
-      userset = userset,
-      variant = variant,
-      Na = Na,
-      K = K,
-      Tris = Tris,
-      Mg = Mg,
-      dNTPs = dNTPs,
-      salt_method = salt_method,
-      mismatch = mismatch,
-      DMSO = DMSO,
-      formamide_unit = formamide_unit,
-      dmso_factor = dmso_factor,
-      formamide_factor = formamide_factor
-    )
+  if (is.null(window)) {
+    # One window per region is right for a probe and absurd for a chromosome:
+    # the nearest-neighbour model is not calibrated at that length, and the
+    # single Tm it would return means nothing.
+    longest <- max(req$end - req$start + 1)
+    if (longest > 1e6)
+      stop("'window' is NULL, which asks for one melting temperature per ",
+           "region, but the longest region is ", format(longest, big.mark = ","),
+           " bp.\n  Set 'window' (and 'slide') to tile it, for example ",
+           "window = 200, slide = 200.")
   }
+  step  <- if (is.null(slide)) 1L else as.integer(slide)
+  tasks <- .tm_tasks(req, src, unit, segment_size, step)
+  gr    <- .tm_run(tasks, src, window, slide, model, BPPARAM,
+                   keep_sequence, verbose)
 
-  if ("tm_wallace" %in% method) {
-    result <- tm_wallace(
-      gr_seq = gr,
-      ambiguous = ambiguous
-    )
-  }
+  result <- list(gr = gr,
+                 options = c(model, list(window = window, slide = slide,
+                                         unit = unit, n_tasks = length(tasks))))
+  class(result) <- c("TmCalculator", "list")
+  attr(result, "nonhidden") <- "gr"
 
   # A data.frame representation is available lazily via result$df
   # (see `$.TmCalculator` in print.TmCalculator.R); converting
   # genome-scale GRanges eagerly here cost seconds per call.
   result
+}
+
+
+# ---------------------------------------------------------------------------
+#' Fill in a GRanges that carries sequences but not their complements
+#'
+#' Every other input form reaches \code{\link{to_genomic_ranges}}, which
+#' derives the complement. A \code{GRanges} handed straight to
+#' \code{\link{tm_calculate}} skipped that step, so an object built with a
+#' \code{sequence} column and nothing else (which is exactly what
+#' \code{regions} treats as a source) reached the compiled core with some
+#' sequences and no complements and failed there, on a message about
+#' \code{cseqs} that says nothing about what the caller did.
+#'
+#' The complement is the plain base-for-base one, not the reverse
+#' complement: \code{tm_nn()} reads the two strands in register, so
+#' reversing one would pair every position with the wrong partner.
+#'
+#' @param gr A \code{GRanges}.
+#' @return The same object, with a \code{complement} column.
+#' @keywords internal
+.tm_complete_gr <- function(gr) {
+  mc <- GenomicRanges::mcols(gr)
+  if (is.null(mc$sequence))
+    stop("A GRanges given as 'input_seq' must carry a 'sequence' column.\n",
+         "  To profile coordinates against a genome, pass the genome as ",
+         "'input_seq' and the coordinates as 'regions'.")
+  if (is.null(mc$complement))
+    gr$complement <- generate_complement(as.character(mc$sequence))
+  gr
+}
+
+# ---------------------------------------------------------------------------
+#' Apply the selected model to windows that already carry their sequence
+#'
+#' The method dispatch that used to be the whole of \code{tm_calculate()}.
+#' It is separate now because both routes through the function end here: the
+#' direct one, and every task of the profiling one.
+#' @param gr Windows with \code{sequence} and \code{complement} columns.
+#' @param model Model arguments, as assembled by \code{\link{tm_calculate}}.
+#' @return A \code{TmCalculator} object.
+#' @keywords internal
+.tm_model <- function(gr, model) {
+  with(model, {
+    # Calculate Tm using each selected method
+    if ("tm_nn" %in% method) {
+      result <- tm_nn(
+        gr_seq = gr,
+        ambiguous = ambiguous,
+        shift = shift,
+        nn_table = nn_table,
+        tmm_table = tmm_table,
+        imm_table = imm_table,
+        de_table = de_table,
+        dnac_high = dnac_high,
+        dnac_low = dnac_low,
+        self_comp = self_comp,
+        Na = Na,
+        K = K,
+        Tris = Tris,
+        Mg = Mg,
+        dNTPs = dNTPs,
+        salt_method = salt_method,
+        DMSO = DMSO,
+        formamide_unit = formamide_unit,
+        dmso_factor = dmso_factor,
+        formamide_factor = formamide_factor
+      )
+    }
+  
+    if ("tm_gc" %in% method) {
+      result <- tm_gc(
+        gr_seq = gr,
+        ambiguous = ambiguous,
+        userset = userset,
+        variant = variant,
+        Na = Na,
+        K = K,
+        Tris = Tris,
+        Mg = Mg,
+        dNTPs = dNTPs,
+        salt_method = salt_method,
+        mismatch = mismatch,
+        DMSO = DMSO,
+        formamide_unit = formamide_unit,
+        dmso_factor = dmso_factor,
+        formamide_factor = formamide_factor
+      )
+    }
+  
+    if ("tm_wallace" %in% method) {
+      result <- tm_wallace(
+        gr_seq = gr,
+        ambiguous = ambiguous
+      )
+    }
+    result
+  })
 }

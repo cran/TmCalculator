@@ -140,8 +140,13 @@ vec_to_genomic_ranges <- function(input_seq) {
   ## milliseconds per sequence and dominated genome-scale runs; the parsing
   ## rules below are unchanged.
 
-  ## Defaults for unnamed sequences, or names that match no pattern
-  chr    <- rep("chr1", n)
+  ## Defaults for unnamed sequences, or names that match no pattern.
+  ## The seqname is the sequence's position in the input. Every unnamed
+  ## sequence used to be labelled "chr1", which named a chromosome that was
+  ## not involved and gave every row the same key, so nothing in the result
+  ## said which input a Tm came from. A position says exactly that, and is
+  ## what `regions = "3:1-20"` already means for an unnamed vector.
+  chr    <- as.character(seq_len(n))
   starts <- rep(1L, n)
   ends   <- as.integer(nchar(input_seq))
   strand <- rep("*", n)

@@ -1,10 +1,14 @@
 ---
-title: "Runtime and Memory for Genome-Scale Tm Profiling: an hg38 Benchmark Guide"
+title: "Genome-Scale Tm Profiling on hg38: Inputs, Parallel Execution and Performance"
 author: "Junhui Li, Lihua Julie Zhu"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    number_sections: true
 vignette: >
-  %\VignetteIndexEntry{Runtime and Memory for Genome-Scale Tm Profiling: an hg38 Benchmark Guide}
+  %\VignetteIndexEntry{Genome-Scale Tm Profiling on hg38: Inputs, Parallel Execution and Performance}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,7 +16,7 @@ vignette: >
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   echo    = TRUE,
-  eval    = FALSE,   # requires BSgenome.Hsapiens.UCSC.hg38 and long runtimes
+  eval    = FALSE,   # the hg38 chunks need BSgenome.Hsapiens.UCSC.hg38 and minutes
   message = FALSE,
   warning = FALSE,
   fig.retina = 1,
@@ -22,857 +26,345 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-This vignette answers two practical questions that come up as soon as Tm
-profiling is scaled from a bacterial genome to the human genome (hg38):
+`tm_calculate()` turns a genome, or any set of regions in it, into a melting
+temperature profile: it tiles the regions into windows, fetches each
+window's sequence, computes a Tm, and returns the lot as one object. The
+same call takes sequences you already have, so there is one function to
+learn; on a mammalian genome it spreads the work across processes.
 
-1. For a **single chromosome** (chr1), how long does the pipeline take, how
-   much memory does it use, and why does parallelizing *inside* a
-   `tm_calculate()` call **not** make it faster (which is why the package
-   no longer offers to)?
-2. For the **whole genome**, how should the work be parallelized, what are
-   sensible parameter settings, and what runtime and memory should be
-   budgeted?
+This vignette answers three questions, in order:
 
-Parts 1 and 2 were measured on a 6-core (12-thread) Intel MacBook Pro
-with 16 GB RAM, R 4.4, macOS, with the package's compiled (Rcpp)
-nearest-neighbor core. The whole-genome sweep of Part 2 was then repeated
-unchanged on a cluster compute node (two 20-core Intel Xeon Gold 6230,
-376 GB, of which the job requested six slots and 48 GB), which is what
-makes it possible to say which of the laptop's results are properties of
-the software and which are properties of a 16 GB machine. Absolute numbers
-will differ on other hardware; the *structure* of the results, which parts
-scale and which do not, will not. The measurement chunks are not evaluated
-when the vignette is built; run them interactively to reproduce them. The
-sweep tables and figure are built from CSV files shipped with the package
-and are evaluated.
+1. **What can I give it?** A BSgenome package, a FASTA file, or sequences
+   already in R, and any set of regions within them.
+2. **How does it divide the work?** Into tasks, one region or one segment
+   each, dispatched to workers.
+3. **How many workers should I use, and how long will it take?** Measured on
+   the human genome in two hardware environments.
 
-```{r libraries}
+**Before you start.** You need a BSgenome package for the genome you want to
+profile; this vignette uses `BSgenome.Hsapiens.UCSC.hg38`. **BiocParallel**
+comes with TmCalculator, so there is nothing to install for the parallel
+part; attach it when you want to name a backend.
+
+```{r install, eval=FALSE}
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+```
+
+The hg38 chunks below are not evaluated when the vignette is built, since
+they take minutes; the timing table and the figure are evaluated, and are
+built from measurements that ship with the package.
+
+# Quick start
+
+The smallest genome-scale call needs a genome and a window width:
+
+```{r quick-start}
 library(TmCalculator)
-library(BiocParallel)
+hg38 <- "BSgenome.Hsapiens.UCSC.hg38"
 
-pkg <- "BSgenome.Hsapiens.UCSC.hg38"
-suppressPackageStartupMessages(library(pkg, character.only = TRUE))
-genome <- get(pkg, envir = asNamespace(pkg))
+tm <- tm_calculate(hg38, window = 200, slide = 200)$gr
+tm
+## GRanges object with 14687412 ranges and 2 metadata columns:
+##       seqnames      ranges strand |        Tm        GC
 ```
 
-# Measuring time and memory
+`tm_calculate()` returns a `TmCalculator` object: `$gr` is the profile and
+`$options` records the model and tiling it was produced with.
 
-Three tools cover almost every need. Wall-clock time comes from
-`system.time()` (read the `elapsed` column; for parallel runs `user` and
-`system` only reflect the manager process). The peak of R-managed memory
-over a code block comes from the `gc(reset = TRUE)` idiom. The true
-resident size of the current process — including C++ allocations that R's
-GC does not see — comes from `ps::ps_memory_info()`.
+That tiles every standard chromosome into non-overlapping 200 bp windows
+and computes a nearest-neighbour Tm for each, in a single process. The
+window width has no default at genome scale, and is not meant to: it is the
+resolution of the profile, so it belongs in the call rather than in a
+default that quietly decides how many rows come back. Adding workers is one
+more argument:
 
-```{r measuring}
-gc(reset = TRUE)                      # reset the "max used" high-water mark
-## ... run the code to be measured ...
-gc()                                  # read peak from the "max used" column
-
-ps::ps_memory_info()[["rss"]] / 1e9   # current process resident set, GB
+```{r quick-start-parallel}
+tm <- tm_calculate(hg38, window = 200, slide = 200,
+                   BPPARAM = BiocParallel::SnowParam(workers = 5))$gr
 ```
 
-(Earlier releases exported a `gc()` of their own, for the GC *content* of a
-sequence, which masked R's garbage collector once the package was attached.
-That function is now `gc_content()`, so no `base::` prefix is needed.)
+Same windows, same Tm values, about a third of the time. How the genome is
+divided changes the runtime, not the result. See the sweep below for how
+far adding workers gets you.
 
-For `SnowParam()` workers the manager cannot see worker memory at all;
-record it inside the worker function and return it with the result (this
-pattern is used in the whole-genome section below).
+Everything else is a refinement of those two calls: which regions, which
+thermodynamic model, and how many workers.
 
-# A ten-second warm-up: chr21
+# What can I give it?
 
-Before committing to chr1, verify your setup on chr21 — at 46.7 Mb it is
-the smallest hg38 autosome and the whole pipeline finishes in about ten
-seconds. It is also a deliberately instructive choice: chr21 *begins*
-with a ~5 Mb assembly gap of `N` bases, so it exercises the N-trimming
-machinery that most chromosomes only touch lightly.
+## The sequence source
 
-```{r chr21-warmup}
-chr_len21 <- GenomeInfoDb::seqlengths(genome)[["chr21"]]
+The first argument says where sequence comes from. It is given by *name*,
+not as a loaded object, because each worker opens the source for itself.
 
-t21 <- system.time({
-  bins21 <- make_genomiccoord(bsgenome = pkg, chromosomes = "chr21",
-                              window = 200L, slide = 200L,
-                              start = 1, end = chr_len21, strand = "+")
-  gr21   <- to_genomic_ranges_fast(list(pkg_name = pkg, seq = bins21),
-                                   method = "preload_chr")
-  tm21   <- tm_calculate(gr21, method = "tm_nn",
-                         nn_table = "DNA_NN_SantaLucia_2004", Na = 50)
-})
-t21["elapsed"]        # ~10-15 s cold, ~6 s warm, on the test machine
-head(tm21$gr)
+```{r sources}
+tm_calculate(hg38, window = 200)         # an installed BSgenome package
+tm_calculate("contigs.fa.gz", window = 200)   # a FASTA file, gzip is fine
+tm_calculate(oligos)                     # a character vector of sequences
 ```
 
-Watch the `make_genomiccoord()` messages: N-trimming reports an effective
-range starting at position 5,010,001 — the leading 5 Mb of `N`s is
-detected in a single in-memory scan and excluded before any windows are
-built, leaving 208,449 windows instead of 233,549. The first run in a
-session pays one-time costs (reading the genome from disk, loading the
-thermodynamic tables); subsequent runs are roughly twice as fast. If this
-warm-up runs cleanly, your BSgenome installation, compiled core and
-memory headroom are all in working order, and the chr1 numbers below
-should reproduce within noise.
+A vector of sequences is staged as a temporary FASTA under `tmpdir` and
+deleted on exit, so that the workers read it rather than receive it. That is
+worth doing for a large set, because it moves window construction and result
+assembly into the workers as well; for a handful of sequences the staging
+and the worker start-up cost more than the calculation, and `tm_calculate()`
+is the right call. On a cluster, set `tmpdir` to node-local scratch: the
+default `tempdir()` is often a small partition.
 
-One benchmarking caveat that bites easily: `devtools::load_all()`
-compiles the C++ core at `-O0` (a debug build, ~6x slower) and leaves a
-mixed session state even after reinstalling. Always benchmark in a fresh
-session with a plain `library(TmCalculator)`; confirm with
-`"devtools_shims" %in% search()` returning `FALSE`.
+## The regions
 
-# Part 1: a single chromosome (chr1)
+`regions` says what to take from the source, in whichever form is at hand.
 
-## The pipeline and its serial cost
+```{r regions}
+## Chromosomes or records, by name or by number. On a BSgenome the chr
+## prefix is added or removed to match the genome, so the same code works on
+## UCSC and on Ensembl; FASTA record names are matched exactly.
+tm_calculate(hg38, regions = 1:22, window = 200)               # autosomes
+tm_calculate(hg38, regions = paste0("chr", c(1:22, "X", "Y")), # no chrM
+             window = 200)
+tm_calculate("contigs.fa.gz", regions = c("contig_7", "contig_9"),
+             window = 200)
 
-chr1 is 248,956,422 bp. Non-overlapping 200 bp windows after N-trimming
-give 1,244,682 windows.
+## Coordinate intervals. Commas and scientific notation are accepted, so a
+## number pasted out of a genome browser works as it stands.
+tm_calculate(hg38, regions = c("chr1:1-10e6", "chrX:5,000,000-6,000,000"),
+             window = 200)
 
-```{r chr1-serial}
-chr_len <- GenomeInfoDb::seqlengths(genome)[["chr1"]]
+## A mixture, when some chromosomes are wanted whole and others in part.
+tm_calculate(hg38, regions = c(1:20, "chr21:1-10e6", "X", "Y"), window = 200)
 
-t_coord <- system.time({
-  bins <- make_genomiccoord(bsgenome = pkg, chromosomes = "chr1",
-                            window = 200L, slide = 200L,
-                            start = 1, end = chr_len, strand = "+")
-})
+## A GRanges, when the regions come from an annotation.
+prom <- promoters(genes(TxDb.Hsapiens.UCSC.hg38.knownGene),
+                  upstream = 1000, downstream = 500)
+tm_calculate(hg38, regions = prom, window = 50, slide = 25)
 
-t_extract <- system.time({
-  gr_batch <- to_genomic_ranges_fast(list(pkg_name = pkg, seq = bins),
-                                     method = "preload_chr")
-})
+## A GRanges carrying its own sequences is a source rather than a query, and
+## then regions selects by overlap: a seqname takes every range on it, an
+## interval takes the ranges it meets. Whole ranges come back, not clipped
+## pieces of them, since their sequences are already fixed.
+tm_calculate(probes_gr, regions = "chr7")
+tm_calculate(probes_gr, regions = "chr7:1-1e6")
 
-base::gc(reset = TRUE)
-t_tm <- system.time({
-  tm_chr1 <- tm_calculate(gr_batch, method = "tm_nn",
-                          nn_table = "DNA_NN_SantaLucia_2004", Na = 50)
-})
-base::gc()   # "max used" = peak R memory during the Tm step
-
-rbind(t_coord, t_extract, t_tm)[, "elapsed"]
-## t_coord t_extract      t_tm
-##     5.5      15.4      30.8     (freshly booted, otherwise idle machine)
+## window = NULL, the default, gives one window per region, which is what
+## short records call for: a FASTA of array probes, primers or synthetic
+## oligos returns one Tm per record. It is refused for a region over 1 Mb,
+## where a single Tm would mean nothing.
+tm_calculate("probes.fa", window = NULL)
+tm_calculate(oligos, BPPARAM = BiocParallel::SnowParam(5))
 ```
 
-Measured on the test machine (`R --vanilla`, freshly booted, no other
-applications):
+Three things are worth knowing before you trust the output.
 
-| step | function | elapsed | notes |
-|---|---|---|---|
-| window coordinates | `make_genomiccoord()` | ~5.5 s | N-end scan loads the 249 Mb chromosome once |
-| sequence extraction | `to_genomic_ranges_fast(method = "preload_chr")` | ~15 s | `extractAt()` itself is ~4 s; the rest is complement generation, the GC column and `GRanges` assembly |
-| Tm calculation | `tm_calculate(method = "tm_nn")` | ~31 s | compiled core, 1.24M windows |
-| **total** | | **~52 s** | |
+*The default includes chrM.* With no `regions`, a BSgenome source covers
+`GenomeInfoDb::standardChromosomes()`, which for GRCh38 is the 24 assembled
+chromosomes **and** the mitochondrion. Name the chromosomes explicitly if
+that does not belong in your profile. The sweep later in this vignette uses
+`paste0("chr", c(1:22, "X", "Y"))` for exactly that reason, and its
+14,687,330 windows are the 24 without chrM.
 
-On a machine with normal background load the same steps run 20-35%
-slower (we measured 7.3 / 19.3 / 41.5 s in an ordinary desktop session);
-comparisons within one section below were always measured in a single
-session.
+*Whole chromosomes are trimmed, named regions are not.* A region that names
+a whole chromosome has its leading and trailing assembly gaps trimmed, since
+a telomeric run of N carries no windows. A region given by coordinate is
+tiled from the start you asked for. Windows containing N are dropped either
+way.
 
-Memory: `base::gc()` reported a peak of ~1.9 GB of R-managed heap during
-the Tm step, and a dedicated worker process running the whole chr1
-pipeline reaches **~3.5-4 GB resident** (sequences, complements, a
-character copy handed to the compiled core, `GRanges` metadata, plus
-loaded packages). A useful planning figure: **budget ~4 GB per
-chr1-sized pipeline**, tapering to well under 2 GB for small
-chromosomes.
+*Overlapping regions are not merged.* They produce windows that appear twice
+in the result, so `tm_calculate()` warns rather than double-counting them
+quietly.
 
-Two extraction details matter at this scale. Pass the input as
-`list(pkg_name = ..., seq = ...)` so the genome package is loaded once,
-and use `method = "preload_chr"` for dense tiling of few chromosomes
-(`getSeq()`-based `"vectorized"` is better for windows scattered across
-many chromosomes).
+## Array probes
 
-## Why parallelism inside a call does not accelerate a single chromosome
+Array manifests are not read directly, since their layout is vendor and
+version specific. Take the probe sequences out with the package that already
+understands the manifest, `illuminaio`, `minfi` or `sesame` for Infinium
+arrays, then pass them as a FASTA file or straight to `tm_calculate()`.
 
-Versions before 1.1.0 accepted a `BPPARAM` argument in `tm_calculate()`
-that split the sequences into one chunk per worker and ran the Tm loop
-on a `BiocParallel` backend. It did exactly what it advertised, yet on
-chr1 it never helped, and the argument has been removed. The measurement
-that decided it (taken with the 1.0.x series; the call no longer runs):
+# How does it divide the work?
 
-```{r chr1-parallel}
-system.time({
-  tm_serial <- tm_calculate(gr_batch, method = "tm_nn", Na = 50)
-})
-## elapsed ~ 30 s
+A **task** is the unit one worker owns from start to finish: it opens the
+source, builds its own windows, fetches its own sequence and computes its
+own Tm. Only a name and a coordinate pair cross between processes, so no
+sequence is ever serialized. `unit` decides how tasks are cut.
 
-## 1.0.x only: BPPARAM no longer exists
-system.time({
-  tm_snow <- tm_calculate(gr_batch, method = "tm_nn", Na = 50,
-                          BPPARAM = SnowParam(workers = 5))
-})
-## elapsed ~ 55 s on the idle machine (33-80 s across repeated sessions)
-## -- NEVER faster than serial
+```{r unit}
+tm_calculate(hg38, window = 200, unit = "segment",   # the default: 73 tasks
+             segment_size = 50e6, BPPARAM = BiocParallel::SnowParam(5))
+tm_calculate(hg38, window = 200, unit = "region",    # 24 tasks
+             BPPARAM = BiocParallel::SnowParam(5))
 ```
 
-The serial time is stable across sessions; the parallel time is not,
-because its added costs (spawning workers, serializing half a gigabyte
-of sequence, loading packages in each worker) are highly sensitive to
-machine state. The decomposition explains why even its best case cannot
-win. Of the ~30 s serial runtime, only the per-window Tm loop (~9 s with
-the compiled core) is divided among workers. The rest is inherently
-serial or is *new* cost created by parallelization:
+The two calls return the same profile, row for row. `regions` and `window`
+decide what is computed; `unit` and `segment_size` decide only how that work
+is handed out, and segment boundaries are held to multiples of `slide` so
+the window grid cannot shift when the segmenting changes.
 
-| component | ~time | scales with workers? |
-|---|---|---|
-| serial preprocessing (N filtering, coercion, result assembly) | ~21 s | no — runs once in the manager |
-| shipping ~0.5 GB of sequence to workers and results back | ~5 s | no — serialization is serial |
-| worker startup + package loading | ~3+ s | fixed cost, *added* by parallelism |
-| compiled Tm loop | ~9 s / n workers | **yes** |
+**Segments are the better default**, for two reasons. Chromosome 1 is an
+indivisible task of 249 Mb, so with one task per chromosome the run cannot
+finish before chromosome 1 does, however many workers are available. And a
+worker holding a 50 Mb segment needs less memory than one holding a whole
+chromosome.
 
-This is Amdahl's law with an unusually small parallel fraction (~30%):
-even with infinitely many workers the floor is ~29 s — essentially the
-serial runtime — and on a loaded machine the added costs balloon well
-past it. With the pure-R core of previous releases the loop
-dominated (minutes for an input of this size) and the same
-`SnowParam(5)` call gave a 2.8x speedup; compiling the loop moved the
-bottleneck into the serial part and made within-call parallelism
-unprofitable. **With the compiled core, a plain serial call is the
-fastest way to run inputs up to roughly a million windows**, which is
-why `tm_calculate()` now runs serially and leaves parallelism to the
-caller, at the level of regions (Part 2).
+**Prefer `SnowParam()` to `MulticoreParam()`.** Forked workers share the
+manager's memory copy-on-write, but R's garbage collector writes to every
+object header it marks, so each worker's collection forces the kernel to
+duplicate the inherited pages. On a genome-scale input that has been
+measured running slower than a single process.
 
-A stronger warning applies to `MulticoreParam()` on large inputs, and it
-carries over to the region-level parallelism of Part 2. Forked workers
-share the manager's memory copy-on-write, but R's garbage collector
-*writes* to every object header it marks, so each worker's GC forces the
-kernel to physically duplicate inherited pages. On a chr1-scale input
-(measured with the pure-R core, where the effect is easiest to see),
-`MulticoreParam(5)` ran *slower than serial* while burning ~18
-CPU-minutes of `system` time on page duplication. When you parallelize,
-prefer `SnowParam()`.
+# How many workers, and how long?
 
-# Part 2: the whole genome
-
-## Parallelize at the chromosome level
-
-The serial preprocessing that defeats within-call parallelism is itself
-embarrassingly parallel *across chromosomes*: window building, extraction,
-filtering and assembly for chr2 are independent of chr1. So for
-genome-scale work, give each worker one whole chromosome and run the
-entire pipeline — coordinates, extraction, `tm_calculate()` with the
-serial default — inside the worker:
-
-```{r genome-parallel}
-chrs <- paste0("chr", c(1:22, "X", "Y"))
-## Better: sort largest-first for load balance -- see "Choosing the
-## worker count" below for the one-liner.
-n_workers <- 5   # see "Choosing the worker count" below
-
-runtime <- system.time({
-  res_list <- bplapply(chrs, function(chr, pkg) {
-    ## SnowParam workers are fresh R processes: load packages HERE,
-    ## not in the manager session.
-    suppressPackageStartupMessages(library(TmCalculator))
-    suppressPackageStartupMessages(library(pkg, character.only = TRUE))
-
-    genome  <- get(pkg, envir = asNamespace(pkg))
-    chr_len <- GenomeInfoDb::seqlengths(genome)[[chr]]
-
-    bins <- make_genomiccoord(bsgenome = pkg, chromosomes = chr,
-                              window = 200L, slide = 200L,
-                              start = 1, end = chr_len, strand = "+",
-                              verbose = FALSE)
-    gr  <- to_genomic_ranges_fast(list(pkg_name = pkg, seq = bins),
-                                  method = "preload_chr")
-    out <- tm_calculate(gr, method = "tm_nn",
-                        nn_table = "DNA_NN_SantaLucia_2004",
-                        Na = 50)$gr        # serial inside the worker
-
-    ## Drop sequence columns before returning: Tm/GC are what we keep,
-    ## and this cuts per-chromosome serialization from ~500 MB to a few MB.
-    out$sequence   <- NULL
-    out$complement <- NULL
-
-    ## Record this worker's peak resident memory (GB) for budgeting.
-    attr(out, "worker_rss_gb") <- ps::ps_memory_info()[["rss"]] / 1e9
-    out
-  }, pkg = pkg, BPPARAM = SnowParam(workers = n_workers))
-
-  tm_genome <- unlist(GenomicRanges::GRangesList(res_list))
-})
-
-runtime
-sapply(res_list, attr, "worker_rss_gb")   # per-worker memory check
-length(tm_genome)                         # 14,687,330 windows
-summary(tm_genome$Tm)
-## Min. 47.2  1st Qu. 68.9  Median 71.5  Mean 72.0  3rd Qu. 74.8  Max. 101.1
-```
-
-Unlike the old within-call `BPPARAM`, this scheme parallelizes *everything*:
-window building, extraction, filtering and assembly, not just the Tm
-loop. Per-task communication is a chromosome name in and a slim
-`GRanges` out, so Amdahl's law has little serial residue to bite on.
-
-The chromosome is not the only unit of work available, though, and the
-choice of unit turns out to matter more than the worker count. The next
-section defines three schemes and the one after it measures all three
-over the same worker range.
-
-## Three ways to divide the work
-
-The three differ in *how many* tasks there are and in *when* a task is
-assigned to a worker.
-
-**Static dispatch** is `SnowParam(workers = n)` left alone. BiocParallel
-pre-splits the task list into one contiguous chunk per worker before
-anything runs, so a worker that draws a light chunk finishes early and
-then sits idle for the rest of the run.
-
-**Dynamic dispatch** is the same task list with `tasks = length(X)`.
-The manager hands out one element at a time, so a worker that finishes
-immediately takes the next. Sorting the chromosomes largest first makes
-this effective: the long tasks are placed while there is still short
-work left to fill the ragged end of the run.
-
-**Segment dispatch** keeps dynamic assignment and changes the unit.
-Instead of 24 whole chromosomes the genome is cut into 50 Mb intervals,
-giving 73 tasks, and the longest single task falls from 55 s to 12 s.
-No schedule can finish sooner than its longest task, so this lowers the
-floor that the other two schemes are pressed against.
-
-```{r strategies}
-sl   <- GenomeInfoDb::seqlengths(genome)[paste0("chr", c(1:22, "X", "Y"))]
-chrs <- names(sort(sl, decreasing = TRUE))          # largest first
-
-tasks_chrom <- lapply(chrs, function(ch)
-  list(chr = ch, start = 1L, end = as.integer(sl[[ch]])))
-
-## Segment boundaries must be multiples of `slide`, or the window grid
-## shifts between segments and the result stops matching a whole-
-## chromosome run. 50 Mb = 250,000 x 200 bp.
-seg_size  <- 50e6
-tasks_seg <- unlist(lapply(names(sl), function(ch) {
-  st <- seq(1, sl[[ch]], by = seg_size)
-  lapply(st, function(s)
-    list(chr = ch, start = as.integer(s),
-         end = as.integer(min(s + seg_size - 1, sl[[ch]]))))
-}), recursive = FALSE)
-
-length(tasks_chrom)   # 24
-length(tasks_seg)     # 73
-
-n <- 5
-BPPARAM_static  <- SnowParam(workers = n)
-BPPARAM_dynamic <- SnowParam(workers = n, tasks = length(tasks_chrom))
-BPPARAM_segment <- SnowParam(workers = n, tasks = length(tasks_seg))
-```
-
-One correctness detail: a segment task must pass `trim_N = "none"` to
-`make_genomiccoord()`, while a whole-chromosome task should trim. Trimming
-inside a segment would move the window grid relative to the chromosome and
-the two schemes would no longer compute the same windows. Interior `N`
-windows are dropped afterwards in both cases, so the totals agree exactly.
-
-## The measured sweep
-
-All 24 chromosomes, 14,687,330 windows, 200 bp non-overlapping, freshly
-booted, `R --vanilla`, three repetitions per configuration in each
-environment. Wall time is elapsed time including worker start-up, which is
-also reported on its own; workers start concurrently, so start-up
-contributes its longest instance rather than the sum. Speedup is the
-one-worker wall time of the same strategy and environment divided by the
-wall time of the configuration, and efficiency is that speedup divided by
-the worker count.
+The sweep below ships with the package: hg38 at 200 bp non-overlapping
+windows, 14,687,330 windows, one to six workers, three repetitions per
+configuration, on a six-core 16 GB laptop and on a cluster compute node given
+six slots and the same 16 GB, so that the two differ in their processors and
+not in their quota.
 
 ```{r sweep-data, eval=TRUE}
-# The two sweeps ship with the package as the CSV files the benchmark
-# scripts wrote, and everything below is derived from them. Nothing is
-# transcribed, so the tables, the figure and the numbers quoted in the text
-# cannot drift apart, and re-running a sweep means replacing a file.
-cols <- c("env", "strategy", "n_workers", "n_tasks", "rep", "wall_s",
-          "startup_s", "wall_compute_s", "work_s", "hard_floor", "max_rss_gb")
+# Read the shipped summaries rather than transcribing numbers, so the table
+# cannot drift from the measurements it describes.
 read_sweep <- function(file, env) {
   d <- utils::read.csv(system.file("extdata", file, package = "TmCalculator"),
                        stringsAsFactors = FALSE)
-  stopifnot(length(unique(d$n_windows)) == 1L)   # identical windows throughout
-  d$env <- env
-  d[, cols]
+  d$Environment <- env
+  d
 }
-raw <- rbind(read_sweep("bench_parallel_strategy.csv", "laptop"),
-             read_sweep("bench_parallel_cluster.csv",  "node"))
-
-# Median over repetitions; the observed range is kept for the wall clock,
-# which is the quantity the range bars in the figure show.
-sweep <- do.call(rbind, lapply(
-  split(raw, list(raw$env, raw$strategy, raw$n_workers), drop = TRUE),
-  function(d) data.frame(
-    env = d$env[1], strategy = d$strategy[1], workers = d$n_workers[1],
-    tasks = d$n_tasks[1], n_rep = nrow(d),
-    wall_s = median(d$wall_s), wall_lo = min(d$wall_s), wall_hi = max(d$wall_s),
-    startup_s = median(d$startup_s), compute_s = median(d$wall_compute_s),
-    work_s = median(d$work_s), longest_task_s = median(d$hard_floor),
-    rss_gb = median(d$max_rss_gb), stringsAsFactors = FALSE)))
-
-# Derived rather than transcribed. Speedup is the one-worker wall clock of
-# the SAME strategy in the SAME environment over the configuration's wall
-# clock: segmenting changes how much total work there is, so a ratio formed
-# against a configuration's own summed task times would credit a strategy
-# for doing more work and the three could not be compared.
-key    <- paste(sweep$env, sweep$strategy)
-ser    <- sweep[sweep$workers == 1L, ]
-serial      <- stats::setNames(ser$wall_s, paste(ser$env, ser$strategy))
-serial_work <- stats::setNames(ser$work_s, paste(ser$env, ser$strategy))
-sweep$speedup    <- serial[key] / sweep$wall_s
-sweep$efficiency <- sweep$speedup / sweep$workers
-sweep$work_ratio <- sweep$work_s / serial_work[key]
-sweep$strategy <- factor(sweep$strategy, levels = c("static", "dynamic", "segment"))
-sweep$env      <- factor(sweep$env, levels = c("laptop", "node"))
-sweep <- sweep[order(sweep$env, sweep$strategy, sweep$workers), ]
-rownames(sweep) <- NULL
+sweep <- rbind(read_sweep("bench_hg38_laptop.csv",  "Laptop"),
+               read_sweep("bench_hg38_cluster.csv", "Compute node"))
+sweep <- sweep[order(sweep$Environment != "Laptop", sweep$n_workers), ]
 ```
 
 ```{r sweep-table, eval=TRUE}
-sweep_table <- function(s, caption) {
-  tab <- data.frame(
-    Strategy   = ifelse(duplicated(s$strategy), "", as.character(s$strategy)),
-    Workers    = s$workers,
-    Tasks      = s$tasks,
-    `Wall (s)` = sprintf("%.1f [%.1f-%.1f]", s$wall_s, s$wall_lo, s$wall_hi),
-    `Start-up (s)` = round(s$startup_s, 1),
-    `Total task time (s)` = round(s$work_s, 1),
-    `Work ratio` = round(s$work_ratio, 2),
-    `Longest task (s)` = round(s$longest_task_s, 1),
-    Speedup    = round(s$speedup, 2),
-    Efficiency = round(s$efficiency, 2),
-    `Peak RSS per worker (GB)` = round(s$rss_gb, 2),
-    check.names = FALSE, stringsAsFactors = FALSE)
-  knitr::kable(tab, row.names = FALSE, caption = caption)
-}
-sweep_table(sweep[sweep$env == "laptop", ],
-  paste("Laptop (6-core Intel Core i7, 16 GB): task-partitioning strategy",
-        "and worker count. Wall time is the median of three repetitions with",
-        "the observed range in brackets."))
+knitr::kable(
+  data.frame(
+    Environment = sweep$Environment,
+    Workers     = sweep$n_workers,
+    `Wall time (s)` = sprintf("%.1f [%.1f-%.1f]", sweep$wall_s, sweep$lo, sweep$hi),
+    Speedup     = sprintf("%.2f", sweep$speedup),
+    `Peak RSS per worker (GB)` = sprintf("%.2f", sweep$peak_worker_gb),
+    check.names = FALSE),
+  row.names = FALSE,
+  caption = paste("Median of three repetitions, observed range in brackets.",
+                  "Wall time includes worker start-up."))
 ```
 
-```{r sweep-table-node, eval=TRUE}
-sweep_table(sweep[sweep$env == "node", ],
-  paste("Compute node (two 20-core Intel Xeon Gold 6230, six slots, 48 GB",
-        "limit, shared with other jobs): the same sweep."))
-```
-
-```{r sweep-figure, eval=TRUE, fig.width=10.5, fig.height=3.9, fig.cap="Parallel performance under three task-partitioning strategies in two environments. Colour is the strategy; solid lines with filled points are the laptop, dashed lines with open points the compute node. (A) Speedup against worker count, relative to the one-worker run of the same strategy and environment; the dashed grey line marks linear speedup. (B) Total task time, summed over all tasks and measured inside the workers; values above the serial reference indicate that a configuration performed more work than the serial run rather than dividing the same work among more processes. (C) Peak resident set size of the heaviest worker."}
-# Three panels, one argument, now made twice. Panel A shows that on the
-# laptop every strategy turns over before the cores run out, which invites
-# the usual explanation of a ragged schedule. Panel B rules that out: the
-# total task time grows with the worker count, so the later configurations
-# are doing more work, not dividing a fixed amount badly. Panel C gives the
-# reason and the remedy together. The node, overlaid, shows what happens to
-# each of the three when memory stops being scarce.
-pal  <- c(static = "#1B5E9C", dynamic = "#C0392B", segment = "#5C6B73")
-ltys <- c(laptop = "solid", node = "22")   # "22": a short dash, legible in a key
-pchs <- c(laptop = 16, node = 1)
-lv   <- levels(sweep$strategy)
-ev   <- levels(sweep$env)
-wk   <- sort(unique(sweep$workers))
-
-op <- par(mfrow = c(1, 3), mar = c(4.4, 4.5, 2.2, 0.8), las = 1,
-          cex = 0.8, mgp = c(2.8, 0.7, 0))
-
-series <- function(col, ylab, ref = NULL, ref_lab = NULL, ymax = NULL,
-                   diagonal = FALSE) {
-  plot(NA, xlim = range(wk),
-       ylim = c(0, if (is.null(ymax)) max(sweep[[col]]) * 1.05 else ymax),
-       bty = "n", xaxt = "n", xlab = "Workers", ylab = ylab)
-  axis(1, at = wk)
-  if (diagonal) {
-    abline(a = 0, b = 1, lty = 2, col = "grey55")
-    text(max(wk), max(wk), "linear", adj = c(1.1, -0.4), cex = 0.75,
-         col = "grey40")
+```{r sweep-figure, eval=TRUE, fig.width=8, fig.height=3.6, fig.cap="Wall-clock time and peak memory per worker against worker count, on a six-core 16 GB laptop (solid, filled) and a compute node given six slots and 16 GB (dashed, open). Points are medians of three repetitions; bars give the observed range."}
+op <- par(mfrow = c(1, 2), mar = c(4.2, 4.4, 2.2, 0.8), mgp = c(2.6, 0.7, 0))
+for (what in c("wall", "rss")) {
+  ys <- if (what == "wall") sweep$wall_s else sweep$peak_worker_gb
+  plot(range(sweep$n_workers), range(0, ys * 1.05), type = "n",
+       xlab = "Workers", xaxt = "n", adj = 0,
+       ylab = if (what == "wall") "Wall clock (s)" else "Peak resident size per worker (GB)",
+       main = if (what == "wall") "A" else "B")
+  axis(1, at = sort(unique(sweep$n_workers)))
+  for (e in unique(sweep$Environment)) {
+    d <- sweep[sweep$Environment == e, ]
+    y <- if (what == "wall") d$wall_s else d$peak_worker_gb
+    solid <- e == "Laptop"
+    if (what == "wall")
+      arrows(d$n_workers, d$lo, d$n_workers, d$hi, angle = 90, code = 3,
+             length = 0.03, col = "grey40")
+    lines(d$n_workers, y, lty = if (solid) 1 else 2, col = "grey20")
+    points(d$n_workers, y, pch = if (solid) 19 else 1, col = "grey20")
   }
-  if (!is.null(ref)) {
-    abline(h = ref, lty = 2, col = "grey55")
-    text(max(wk), ref, ref_lab, adj = c(1.1, -0.5), cex = 0.75, col = "grey40")
-  }
-  for (e in ev) for (st in lv) {
-    d <- sweep[sweep$env == e & sweep$strategy == st, ]
-    lines(d$workers, d[[col]], col = pal[st], lwd = 2, lty = ltys[e])
-    points(d$workers, d[[col]], col = pal[st], pch = pchs[e], lwd = 1.6)
-  }
+  if (what == "wall")
+    legend("topright", c("Laptop, 6 cores", "Compute node, 6 slots"),
+           lty = c(1, 2), pch = c(19, 1), bty = "n", cex = 0.85, col = "grey20")
 }
-
-series("speedup", "Speedup", ymax = max(wk) * 1.02, diagonal = TRUE)
-mtext("A", side = 3, adj = 0, font = 2, line = 0.7, cex = 1.05)
-# One legend, two columns: environment keys on the left, strategy colours
-# on the right. legend() fills column-major, so the shorter column is padded
-# with a blank entry whose lty, pch and col are NA.
-legend("topleft", bty = "n", cex = 0.8, ncol = 2, seg.len = 2.6,
-       legend = c(ev, "", lv),
-       lty = c(unname(ltys[ev]), NA, rep("solid", length(lv))),
-       pch = c(unname(pchs[ev]), NA, rep(NA, length(lv))),
-       col = c("grey25", "grey25", NA, unname(pal[lv])), lwd = 2)
-
-series("work_s", "Total task time (s)",
-       ref = median(sweep$work_s[sweep$workers == 1]), ref_lab = "serial")
-mtext("B", side = 3, adj = 0, font = 2, line = 0.7, cex = 1.05)
-
-series("rss_gb", "Peak resident set size per worker (GB)")
-mtext("C", side = 3, adj = 0, font = 2, line = 0.7, cex = 1.05)
-
 par(op)
 ```
 
-Three readings.
+Two things in that table decide a worker count.
 
-**Dispatch order matters at every worker count.** Static and dynamic run
-the identical 24 tasks; the only difference is that static commits them
-to workers up front. At four workers that costs 60 s, a fifth of the run.
+**More workers stop helping, and where depends on cores.** The laptop is
+fastest at five workers, 179.7 s against 590.3 s in one process, and a sixth
+worker returns the same time with a far wider spread across repetitions
+(176.4 to 214.9 s, against 10.9 s or less at every smaller count). Five
+workers and the process that dispatches them already occupy the laptop's six
+cores, so the sixth has none left. The node, whose six slots sit on a
+forty-core machine, improves all the way to six workers and 114.4 s, its
+repetitions differing by 2.2 s or less throughout.
 
-**Segmenting is worth more than dispatch order.** On the laptop, segment
-dispatch is faster than dynamic at every worker count from three upwards,
-and its best time, 189 s, is 29 s better than dynamic's best and 66 s
-better than static's. The mechanism is in the "longest task" column: 55 s of
-chr1 cannot be divided by any scheduler, and at five workers that single
-task is nearly a third of the whole run.
+**Memory was not the limit on either machine.** Peak resident size per worker
+reached 3.5 GB in the one-worker run and stayed between 2.0 and 3.6 GB
+thereafter, because no worker holds more than one 50 Mb task at a time. Both
+sweeps ran well inside 16 GB.
 
-**Segmenting halves the memory.** A worker holding a 50 Mb segment needs
-about 1.9 GB against 3.7 GB for one holding chr1, and peak memory is what
-decides how many workers a machine can run at all. On this 16 GB laptop
-segment dispatch is both the fastest scheme and the one that leaves the
-most headroom, which is an unusually convenient combination.
+Fitting the wall times to Amdahl's law gives `T(n) = 79.4 + 509.2/n` on the
+laptop and `T(n) = 41.6 + 456.4/n` on the node, both with R-squared of at
+least 0.997. The divisible part is nearly the same on the two machines, as it
+should be for the same work; what differs is the constant, by a factor of
+1.9, and the number of cores available to divide among.
 
-**On the laptop, all three turn over well before the cores run out.** Six
-physical cores are available, yet static peaks at 6, dynamic at 4 and
-segment at 5, and none reaches half of linear speedup. The next section
-explains why, the reason is not the one that first suggests itself, and
-the section after it shows the same sweep on a machine where the reason
-does not apply.
+A rule that works on both machines:
 
-## Why the speedup saturates
+> workers = physical cores - 1
 
-The obvious explanation for a curve that flattens is a ragged schedule:
-one long task holding up the end while other workers idle. The "total
-task time" column rules that out. It is the sum of the per-task times,
-measured inside the workers and excluding their package loading, so it is
-the amount of work the run actually performed. If the schedule were
-merely uneven, that column would stay flat and only the wall clock would
-suffer.
+Confirm it on your own machine with a short sweep over one chromosome rather
+than the whole genome. Note that worker start-up, roughly nine seconds per
+call, is included in every timing, so a run that takes less than a minute
+will understate the speedup:
 
-It does not stay flat. From one worker to six it grows by 53% under
-static dispatch, 88% under segment dispatch and 152% under dynamic
-dispatch. The later configurations are not dividing a fixed amount of
-work badly, they are doing more of it: the same chr1 task that takes
-53 s alone takes 127 s with five siblings competing for memory bandwidth
-and last-level cache. Each worker is individually slower, and past a
-certain point adding one slows the others by more than it contributes.
-
-This also explains the ordering. Dynamic dispatch inflates worst because
-its tasks are the largest resident objects, so the workers contend most
-for cache; segmenting reduces the resident footprint per worker and
-inflates less. The effect is a property of the machine rather than of
-the software, so a machine with more memory should show the turnover
-later, or not at all. That is a prediction, and the next section tests
-it. Rerun the sweep on your own hardware rather than transplanting these
-worker counts.
-
-The `work ratio` column is the one to watch when you do. As long as it
-stays near 1.0, adding workers is buying real parallelism; once it passes
-about 1.3 the run is mostly paying for its own contention.
-
-## The same sweep on a compute node
-
-The sweep was repeated with nothing changed but the machine: the same
-window grid, parameter set, worker counts and three repetitions, on a
-cluster node with two 20-core Intel Xeon Gold 6230 CPUs at 2.10 GHz,
-hyper-threading disabled, and 376 GB of memory, of which the job
-requested six slots and 48 GB. The node was shared with other jobs, so
-the run-to-run ranges are reported rather than suppressed; they are wide
-at one to three workers and narrow from four upwards.
-
-Two things about that setup need saying. The job could not be given the
-laptop's 16 GB. The scheduler enforces the sum of resident set size over
-every process in the job, and six socket workers plus their manager
-occupy about 23 GB, so a 16 GB request was killed after half an hour; 48
-GB, three times the laptop and twice the measured peak, is what ran. And
-the workers share almost nothing with one another: summed proportional
-set size, which divides each shared page among its sharers, tracks summed
-RSS to within 0.2%, because each PSOCK worker attaches the packages and
-retrieves sequence for itself. The 23 GB is real, not an accounting
-artefact of shared mappings.
-
-The result is the one the contention argument predicts, and it shows in
-every quantity that argument used:
-
-| At six workers, static / dynamic / segment | laptop | node |
-|---|---|---|
-| efficiency | 0.39 / 0.36 / 0.47 | 0.51 / 0.74 / 0.77 |
-| work ratio | 1.53 / 2.52 / 1.88 | 1.09 / 1.19 / 1.15 |
-| longest dynamic task, one worker to six | 53.4 to 127.5 s | 50.9 to 62.6 s |
-| dynamic dispatch at four / five / six workers | 218.0 / 245.0 / 272.0 s | 176.6 / 149.0 / 128.9 s |
-
-The turnover is gone. Every curve on the node improves monotonically to
-six workers; dynamic dispatch reaches 128.9 s where on the laptop it was
-slowest at six of any configuration beyond three; and neither dynamic nor
-segment dispatch had saturated. The growth in total task time, which was
-the evidence that workers were slowing one another, falls to under a
-fifth. The longest task grows by a quarter instead of doubling. And the
-run-to-run spread, which on the laptop widened to 14 to 35 s at four to
-six workers for the two dynamic schemes, is 6 s or less on the node for
-the same configurations; timing that will not repeat is what paging looks
-like.
-
-Segment dispatch is still the fastest, at 127.0 s, but its margin over
-dynamic dispatch falls from 29 s to 2 s. Bounding the working set is
-worth a great deal on a machine that is short of memory and almost
-nothing on one that is not. That is the practical form of the point made
-above: the ordering of the strategies is a property of the machine as
-much as of the partitioning.
-
-One number runs the other way and is worth understanding rather than
-explaining away. Peak memory per worker is *higher* on the node, 3.83 GB
-against 2.15 GB for dynamic dispatch at six workers. R's garbage collector
-reclaims on demand, so a process under no pressure keeps more allocated
-than one that is being squeezed; measured memory use is partly a function
-of memory available, and the per-worker figures in the tables are what
-the process settled at, not what it needed.
-
-## Where the extra work lands
-
-The summary table reports only the longest task, which hides which task
-that was and whether the inflation is spread evenly. The benchmark also
-writes a per-task file, `*_tasks.csv`, with one row per task and
-repetition: chromosome, interval, window count, time, and the worker's
-resident memory. The laptop's is shipped with the package, compressed,
-and recovering the per-chromosome picture from it is a few lines:
-
-```{r per-chrom, eval=TRUE}
-tk <- utils::read.csv(system.file("extdata", "bench_parallel_strategy_tasks.csv.gz",
-                                  package = "TmCalculator"))
-tk <- tk[tk$strategy == "dynamic", ]        # one task per chromosome
-
-## Median over repetitions, one column per worker count.
-w <- stats::reshape(
-  stats::aggregate(secs ~ chr + n_workers, data = tk, FUN = stats::median),
-  idvar = "chr", timevar = "n_workers", direction = "wide")
-names(w) <- sub("^secs\\.", "w", names(w))
-
-w$inflation <- w$w6 / w$w1                  # 6 workers vs serial
-w <- w[order(-w$w1), ]
-knitr::kable(w, row.names = FALSE, digits = 1,
-             caption = "Laptop, dynamic dispatch: median seconds per chromosome at each worker count.")
+```{r sweep-your-machine}
+for (n in 1:6) {
+  t <- system.time(
+    tm_calculate(hg38, regions = "chr21", window = 200, slide = 200,
+                 method = "tm_nn", segment_size = 10e6,
+                 BPPARAM = BiocParallel::SnowParam(n), verbose = FALSE))
+  cat(sprintf("%d workers: %.1f s\n", n, t[["elapsed"]]))
+}
 ```
 
-Read it two ways. Down the `w1` column is the serial cost of each
-chromosome, which is what sets the floor no scheduler can go below: the
-largest single value is the hard limit on any chromosome-level schedule,
-and it is the number segmenting exists to reduce. Across a row is how
-much slower that same task became as workers were added, with `inflation`
-summarising it. A ratio near 1.0 means the task was indifferent to its
-neighbours; a large ratio means it was competing with them for memory
-bandwidth and cache.
+The sweeps above were produced by `bench_tm_calculate.R`, driven by
+`bench_tm_calculate_local.sh` on the laptop and by `bench_tm_calculate.lsf`
+on the compute node. All three are in
+`system.file("scripts", package = "TmCalculator")`, and their summaries are
+the two CSV files read here, `bench_hg38_laptop.csv` and
+`bench_hg38_cluster.csv` in `extdata`, so re-running one on your own
+machine produces a file this vignette can read.
 
-The distinction matters for choosing a strategy. If inflation were
-uniform across chromosomes it would be a fixed tax and segmenting would
-not help with it. If instead the large chromosomes inflate most, then the
-same property that makes them stragglers also makes them the main source
-of contention, and cutting them into segments addresses both at once.
+`bench_tm_calculate.R` in the same directory times `tm_calculate()` itself over
+a range of worker counts, with `bench_tm_calculate.lsf` to submit it, and is
+the one to reach for when sizing a new machine.
 
-## Segmenting one chromosome
+# What comes back
 
-Segment dispatch also answers the question Part 1 left open: how *do*
-you parallelize a single chromosome? Ship coordinates, not sequences.
-Each worker receives a `(start, end)` pair, a few dozen bytes, and runs
-the entire pipeline on its own segment. Every row of the Part 1 cost
-table becomes parallel except worker startup, because the preprocessing
-happens inside the workers and the half-gigabyte serialization never
-occurs.
+A `GRanges` with `Tm` and `GC` metadata columns in genomic order, ready for
+`integrate_granges()`, `compare_groups()` and the plotting functions, and
+for anything else that takes genomic intervals.
 
-```{r segment-parallel}
-chr_len <- GenomeInfoDb::seqlengths(genome)[["chr1"]]
-
-## Segment length must be a multiple of `slide` so the window grid stays
-## aligned across segment boundaries (50 Mb = 250,000 x 200).
-seg_starts <- seq(1, chr_len, by = 50e6)
-seg <- data.frame(start = seg_starts,
-                  end   = pmin(seg_starts + 50e6 - 1, chr_len))
-
-t_seg <- system.time({
-  res_seg <- bplapply(seq_len(nrow(seg)), function(i, seg, pkg) {
-    suppressPackageStartupMessages(library(TmCalculator))
-    suppressPackageStartupMessages(library(pkg, character.only = TRUE))
-    bins <- make_genomiccoord(bsgenome = pkg, chromosomes = "chr1",
-                              window = 200L, slide = 200L,
-                              start = seg$start[i], end = seg$end[i],
-                              strand = "+", trim_N = "none",
-                              verbose = FALSE)
-    gr <- to_genomic_ranges_fast(list(pkg_name = pkg, seq = bins),
-                                 method = "preload_chr")
-    out <- tm_calculate(gr, method = "tm_nn",
-                        nn_table = "DNA_NN_SantaLucia_2004", Na = 50)$gr
-    out$sequence <- NULL; out$complement <- NULL
-    out
-  }, seg = seg, pkg = pkg, BPPARAM = SnowParam(workers = 5))
-
-  tm_chr1_seg <- sort(unlist(GenomicRanges::GRangesList(res_seg)))
-})
-
-t_seg["elapsed"]      # 38 s measured, vs ~52 s for the serial FULL pipeline
-length(tm_chr1_seg)   # 1,152,300
+```{r downstream}
+tm_annot <- integrate_granges(gr_tm = tm, gr_features = atac_peaks,
+                              strategy = "overlap", weight = "overlap")
+compare_groups(tm_annot, value_cols = "Tm", group_col = "class")
 ```
 
-Mind the comparison scope: 38 s covers the *entire* pipeline (windows,
-extraction, Tm), so the serial reference is the ~52 s pipeline total from
-Part 1 — a **1.35x** speedup — not the 30 s Tm-only figure. Modest, but
-it is the only single-chromosome parallelization that wins at all
-(within-call `SnowParam` *lost* to serial above), and the result is
-verifiably identical: 1,152,300 windows equals the serial run's
-1,244,682 generated minus its 92,382 N-gap windows, exactly. That
-equivalence is by construction — `trim_N = "none"` keeps the window grid
-identical across segments (the "Skipped ... regions" warning from
-`tm_calculate()` is expected; hg38 chr1 carries an ~18 Mb interior
-centromeric gap), and the 50 Mb segment length is a multiple of `slide`.
+The sequence and complement columns are dropped by default, since they run
+to roughly 500 MB per large chromosome; pass `keep_sequence = TRUE` if you
+need them.
 
-The gain is capped well below worker-count because each worker pays
-fixed costs the serial run pays once: loading packages and reading the
-same 249 Mb chromosome to extract its segment, with five workers
-contending for the same file. Per-worker memory stays moderate, about
-1 to 2 GB, since only a 50 Mb segment is windowed at a time.
+# One function, two ways of using it
 
-## Choosing the strategy and the worker count
+`tm_calculate()` starts either from a source it can open, as above, or from
+sequences you already hold:
 
-Take segment dispatch. It was fastest at every worker count from three
-upwards, it halves the per-worker memory, and the memory saving is what
-lets a machine run more workers in the first place. Chromosome-level
-dispatch is worth keeping only if the downstream analysis wants whole
-chromosomes back as single objects.
-
-For the worker count, two constraints, take the minimum:
-
-```{r workers}
-mem_gb    <- 16                                     # your machine
-cores     <- parallel::detectCores(logical = FALSE) # physical cores
-per_worker_gb <- 2                                  # 50 Mb segment task
-n_workers <- min(cores - 1L, floor((mem_gb - 4) / per_worker_gb))
-n_workers
-## 16 GB / 6 cores  -> 5 workers, which is what the sweep found fastest
-## 32 GB / 8 cores  -> 7 workers
-## 64 GB / 10 cores -> 9 workers
+```{r tm-calculate}
+tm_calculate(c("ACGTGCTAGCTAGCTAGC", "GGCCATATATGCGC"), method = "tm_nn", Na = 50)
 ```
 
-Use 2 GB per worker for segment tasks and 4 GB for whole-chromosome
-tasks; those are the measured peaks, not estimates. Do not count
-hyperthreads. The compiled core is CPU-bound and logical cores add little
-beyond scheduler overhead, and the laptop sweep shows the run is already
-contending for cache at five real cores. On the compute node the memory
-term is nowhere near binding, 22 workers at 48 GB, so the core term
-governs; with six slots the formula gives five, and the sweep was still
-improving at six. That is the case the formula is built for: it is a
-floor to start from, and the sweep is what sets the number.
+Given sequences and nothing else it does exactly what it has always done,
+one Tm per sequence, by the shortest path through the function. Add
+`regions`, `window` or `BPPARAM` and the profiling machinery engages.
 
-Treat the memory bound as hard. When workers do collide the system
-swaps, and a swapping parallel run is slower than serial: we measured
-19 GB of swap and a wedged machine in exactly this state, aggravated by
-leftover workers from interrupted runs.
+What it will not do is divide the sequences of one region among workers.
+With the compiled core the per-window loop is a minority of a call's cost;
+window construction, sequence retrieval and result assembly run once, and
+sending the sequences to workers costs more than the loop it divides.
+Measured on chromosome 1, splitting one call across five workers was never
+faster than not splitting it. Parallelism therefore divides by region, and
+sequences handed in directly are staged to a temporary file so that the
+workers read them rather than receive them.
 
-Two smaller settings that the sweep shows are not optional. Sort the
-tasks largest-first, because the scheduler deals them out in order and a
-long task placed last has nothing left to overlap with. And pass
-`tasks = length(X)` to `SnowParam()`; leaving it at the default is what
-makes a run "static", and that cost 60 s at four workers here for no
-benefit at all.
+# Session information
 
-```{r sort-chrs}
-sl   <- GenomeInfoDb::seqlengths(genome)
-chrs <- names(sort(sl[paste0("chr", c(1:22, "X", "Y"))], decreasing = TRUE))
-```
-
-## Reproducing the sweep
-
-The whole measurement is scripted, including the per-task instrumentation
-that separates worker start-up from compute and records each worker's
-peak resident memory:
-
-```sh
-# laptop, or any single machine
-Rscript inst/scripts/bench_parallel_strategy.R \
-  --workers 1,2,3,4,5,6 --reps 3 --outfile bench_parallel_strategy.csv
-
-# cluster node under LSF. Edit the conda environment, queue and CPU model
-# in the #BSUB header first; the script activates the environment itself,
-# checks that the package and hg38 are installed before it starts, and
-# writes results/ under the directory it was submitted from.
-bsub < inst/scripts/bench_parallel_cluster.lsf
-
-# the two-environment table and figure of the manuscript
-Rscript inst/scripts/make_figure5_two_env.R \
-  --csv-hpc results/bench_parallel_cluster.csv \
-  --csv-mac bench_parallel_strategy.csv
-```
-
-Include one worker in the sweep. It is the baseline every speedup is
-divided by, and BiocParallel runs a single worker inside the manager
-rather than spawning one, so that point measures the serial cost with
-nothing to serialise. Without it the only available ratios are against
-each strategy's own summed task times, which are not comparable across
-strategies because segmenting changes how much total work there is.
-
-For a cluster, `inst/scripts/bench_parallel_cluster.R` adds the three
-things a shared machine needs: it reads the allocated core count from the
-scheduler rather than from `detectCores()`, which on a shared node reports
-the whole machine and oversubscribes badly; it stages the genome package
-on node-local disk, because BSgenome reads the `.2bit` at random offsets
-and several workers hitting a shared filesystem measure storage latency
-instead of software; and it sweeps physical cores only. The submission
-file pins one CPU model, because a cluster whose nodes span several
-processor families would otherwise return a range that measures the
-scheduler; requests six slots and 48 GB, for the reasons given above;
-records the node's load before and after the sweep; and samples summed
-RSS and PSS every ten seconds so the shared-memory question can be
-answered from the log rather than assumed.
-
-## Housekeeping
-
-Four operational notes. First, benchmark in a session that did *not*
-restore a saved workspace (`[Workspace loaded from ~/.RData]` at startup
-means gigabytes of old objects are already resident); disable
-"Restore .RData at startup" in RStudio or start `R --vanilla`. Second,
-`SnowParam()` workers load the *installed* package: after
-`devtools::load_all()` development changes, run `devtools::install()`
-before benchmarking, and note that `load_all()` compiles C++ at `-O0` —
-time only the installed build. The same applies to
-`devtools::build_vignettes()`, which evaluates vignette code against a
-`-O0` debug build (timings come out ~6x slow); set
-`options(pkg.build_extra_flags = FALSE)` to disable the debug flags, or
-rely on `R CMD build` / `devtools::check()`, which install with normal
-optimization before running vignettes. Changing the flag option does
-*not* trigger recompilation — stale `-O0` object files in `src/` are
-reused as long as sources are unchanged — so run `pkgbuild::clean_dll()`
-after changing it.
-Third, if a parallel run errors or is interrupted, workers can linger
-and hold gigabytes; check for orphaned `R` processes (Activity Monitor on
-macOS, `ps aux | grep R` elsewhere) before rerunning. Fourth, worker
-`message()` output is buffered until each task finishes — a silent
-console does not mean a hung run; watch the worker processes' CPU
-instead.
-
-# Summary
-
-For hg38 with the compiled nearest-neighbor core, run single chromosomes
-serially; `tm_calculate()` has no parallel option because within-call
-parallelism cannot beat Amdahl's law when the parallel fraction is about
-30%.
-
-For the whole genome, parallelize outside the call, over 50 Mb segments
-rather than whole chromosomes, with `SnowParam(workers = n, tasks =
-length(X))` and the tasks sorted largest-first. On a 6-core, 16 GB
-laptop that runs 14.7 million windows in 189 s at five workers, against
-578 s serially, a speedup of 3.06 at 1.9 GB per worker. The same run
-organised by chromosome takes 218 s at best and needs 2.9 GB per worker.
-On a compute node with six slots and 48 GB the segment run takes 127 s, a
-speedup of 4.61, and the chromosome-organised run is within 2 s of it.
-
-Set the worker count from `min(physical cores - 1, (memory - 4) / 2)`,
-then verify rather than trust it. On the laptop every strategy turned
-over before the cores ran out, and the reason was not scheduling: the
-total task time grew with the worker count, by 53% to 152% from one
-worker to six, as workers competed for memory bandwidth and cache. On the
-node, with three times the memory, that growth fell to under a fifth and
-nothing turned over. The turnover is a property of the machine, so the
-right worker count on your hardware is the one the sweep finds, not the
-one copied from these tables.
-
-# Session info
-
-```{r sessioninfo, eval=TRUE}
+```{r session-info, eval=TRUE}
 sessionInfo()
 ```

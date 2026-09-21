@@ -33,7 +33,9 @@
 #'       of its windows in a single \code{extractAt()} call. Recommended for
 #'       dense tiling of one or a few chromosomes (e.g. genome-wide sliding
 #'       windows), where it is several times faster than \code{getSeq()};
-#'       holds one chromosome in memory at a time.}
+#'       holds one chromosome in memory at a time. A BSgenome caches the
+#'       sequences it has loaded, so a second call for the same chromosome
+#'       does not read it again.}
 #'   }
 #'
 #' @return A \code{GRanges} object with metadata columns:
@@ -350,6 +352,14 @@ coor_to_genomic_ranges <- function(
         chr, pkg, format(length(idx_chr), big.mark = ",")
       ))
 
+      # genome[[chr]] and not getSeq(genome, chr, start, end). Taking only the
+      # span the windows cover looks like the saving, and was tried: it
+      # measured 7% slower on the hg38 sweep at six workers, 126.7 s against
+      # 118.6 s. A BSgenome caches each sequence it has loaded inside the
+      # object, so the repeated loads that change was meant to avoid were
+      # already being served from that cache, and getSeq reaches the same
+      # cached chromosome and then copies a subsequence out of it. The copy
+      # is the whole difference.
       chr_seq <- tryCatch(
         genome[[chr]],
         error = function(e) {

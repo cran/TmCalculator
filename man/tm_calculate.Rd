@@ -43,20 +43,48 @@ tm_calculate(
   formamide_unit = list(value = 0, unit = "percent"),
   dmso_factor = 0.75,
   formamide_factor = 0.65,
-  mismatch = TRUE
+  mismatch = TRUE,
+  regions = NULL,
+  window = NULL,
+  slide = window,
+  unit = c("segment", "region"),
+  segment_size = 5e+07,
+  BPPARAM = NULL,
+  keep_sequence = NULL,
+  tmpdir = tempdir(),
+  verbose = FALSE
 )
 }
 \arguments{
-\item{input_seq}{Input sequence(s) in 5' to 3' direction. Can be provided as either:
-- A character string (e.g., "ATGCG")
-- A path to a FASTA file containing the sequence(s)
-- A GRanges object with sequence and complement metadata should be provided if mismatch is TRUE
-- A character vector where each element is a string in the format "chr:start-end:strand:species" (e.g., "chr1:100-200:+:BSgenome.Hsapiens.UCSC.hg38"). Strand is "+" for positive (default if not provided) or "-" for negative.
-  - chr: Chromosome ID
-  - start: Start position
-  - end: End position
-  - strand: positive or negtive strand
-  - species:  Species name for reference genome (e.g., "BSgenome.Hsapiens.UCSC.hg38"), see \code{BSgenome::available.genomes()} for all available genomes. please make sure the genome package is installed, otherwise the function will stop.}
+\item{input_seq}{Where the sequence comes from. One of:
+  \itemize{
+    \item \strong{Sequences}, as a character vector in 5' to 3' direction,
+      e.g. \code{c("ATGCG", "GGCCA")}. Names, when present, become the
+      \code{seqnames} of the result; unnamed sequences are keyed by their
+      position in the vector.
+    \item \strong{An installed BSgenome package}, by name, e.g.
+      \code{"BSgenome.Hsapiens.UCSC.hg38"}. It is named rather than passed
+      as a loaded object because each worker opens the genome for itself,
+      so no sequence crosses between processes. See
+      \code{BSgenome::available.genomes()} for what exists, and install the
+      package before calling.
+    \item \strong{A FASTA file}, by path; gzipped files are read directly.
+    \item \strong{A \code{GRanges}} carrying a \code{sequence} metadata
+      column. The complement is derived from it when absent.
+  }
+  \code{regions} selects from any of the four, and means the same thing in
+  each: the identifier before the colon is resolved against whatever names
+  the source itself offers, and falls back to position. A BSgenome or a
+  FASTA file with no \code{regions} is taken whole, which for a genome
+  means its standard chromosomes.
+
+  Also accepted, and unchanged from earlier versions: a character vector of
+  coordinate strings \code{"chr:start-end:strand:species"}, for example
+  \code{"chr1:100-200:+:BSgenome.Hsapiens.UCSC.hg38"}, where strand
+  defaults to \code{"+"}. This form carries its own genome in every
+  element, so it is read directly and ignores \code{regions}; to profile
+  coordinates against a genome, prefer passing the genome here and the
+  coordinates as \code{regions}.}
 
 \item{method}{Method(s) to use for Tm calculation. Can be one or more of:
 - "tm_nn": Nearest Neighbor thermodynamics (default)
@@ -172,6 +200,61 @@ Several papers report factors between 0.6 and 0.72.}
 
 \item{mismatch}{Logical. If TRUE, every '.' in the sequence is counted as a mismatch.
 Only applicable for the GC method. Default: TRUE}
+
+\item{regions}{What to take from \code{input_seq}. \code{NULL}, the
+  default, means all of it, except for a \pkg{BSgenome}, where it means
+  \code{GenomeInfoDb::standardChromosomes()} of that genome, which for
+  GRCh38 includes chrM. Otherwise: names or numbers
+  (\code{c("chr1", "chr2")}, \code{1:2}), coordinate strings
+  \code{"name:start-end"} with commas and scientific notation accepted
+  (\code{"chr1:5,000,000-6e6"}), a mixture of the two, or a
+  \code{GRanges}.
+
+  The identifier before the colon is resolved against whatever names the
+  source itself offers, and falls back to position. So \code{"chr1"} is a
+  chromosome in a \pkg{BSgenome}, a record in a FASTA file and a
+  \code{seqname} in a \code{GRanges}, and \code{"1:1-200"} is the first
+  200 bases of the first sequence in an unnamed character vector. On a
+  \pkg{BSgenome} the \code{chr} prefix is added or removed as the genome
+  requires, since that is a convention rather than information; elsewhere
+  names are matched exactly.}
+
+\item{window}{Window width in base pairs. \code{NULL}, the default, gives
+one melting temperature per region, which is what short records such as
+probes, primers and oligonucleotides call for; a region longer than 1 Mb
+with \code{window = NULL} is an error rather than one meaningless Tm.
+Regions shorter than \code{window} are returned whole.}
+
+\item{slide}{Step between window starts, defaulting to \code{window} for a
+non-overlapping tiling. Ignored when \code{window} is \code{NULL}.}
+
+\item{unit}{How regions become tasks: \code{"segment"} cuts them into
+pieces of about \code{segment_size} bp, \code{"region"} makes one task
+per region. Segments are faster and need less memory per worker, because
+no worker then holds a whole large chromosome.}
+
+\item{segment_size}{Task size in base pairs when \code{unit = "segment"},
+rounded down to a multiple of \code{slide} so that the window grid is
+the one an unsegmented run would produce. Default 50 Mb.}
+
+\item{BPPARAM}{A \code{BiocParallelParam} from \pkg{BiocParallel}, e.g.
+\code{SnowParam(workers = 5)}, to spread the tasks over processes.
+\code{NULL}, the default, runs them here, with no dependency on
+\pkg{BiocParallel}. Parallelism divides the work by region, never the
+sequences of one region: each task opens the source itself, so only a
+name and a coordinate pair cross between processes.}
+
+\item{keep_sequence}{Keep the \code{sequence} and \code{complement}
+columns. The default keeps them for sequences the caller supplied and
+drops them for a genome or a file, where they run to roughly 500 MB per
+large chromosome.}
+
+\item{tmpdir}{Directory for the temporary FASTA file written when
+sequences are supplied directly and there is tiling or parallelism to
+do. Worth setting on a cluster, where \code{tempdir()} is often a small
+partition.}
+
+\item{verbose}{Report the task and window counts.}
 }
 \value{
 A \code{TmCalculator} list with:
@@ -366,6 +449,25 @@ result_ls <- tm_calculate(
   nn_table = "RNA_DNA_NN_Weber_2019_LS",
   Na = 100
 )
+
+# Genome scale. The source is named rather than loaded, because each
+# worker opens it for itself; `regions` says what to cover and `window`
+# says at what resolution.
+hg38 <- "BSgenome.Hsapiens.UCSC.hg38"
+tm_calculate(hg38, regions = "chr21:10e6-20e6", window = 200, slide = 200)
+
+# Five processes. Tasks are divided by region, never by splitting the
+# sequences of one region, so only coordinates cross between them.
+library(BiocParallel)
+whole <- tm_calculate(hg38, window = 200, slide = 200,
+                      BPPARAM = SnowParam(workers = 5))
+whole$gr
+
+# The same, for a FASTA file and for sequences already in R. With
+# window = NULL, the default, each record returns a single Tm, which is
+# what a file of probes or primers calls for.
+tm_calculate("probes.fa", BPPARAM = SnowParam(workers = 4))
+tm_calculate(c("ACGTGCTAGCTAGCTAGC", "GGCCATATATGCGC"))
 }
 
 }

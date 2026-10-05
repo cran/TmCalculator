@@ -15,7 +15,7 @@
 #' 
 #' @param method Method for calculating salt concentration corrections to the melting temperature.
 #'   Available options:
-#'   - "Schildkraut2010": Updated salt correction method
+#'   - "Schildkraut2010": Schildkraut & Lifson (1965); historical identifier
 #'   - "Wetmur1991": Classic salt correction method
 #'   - "SantaLucia1996": DNA-specific salt correction
 #'   - "SantaLucia1998-1": Improved DNA salt correction
@@ -37,14 +37,29 @@
 #' 
 #' Different correction methods are available for various experimental conditions:
 #' 
-#' - Schildkraut2010: Updated salt correction method that accounts for monovalent and divalent cations
+#' - Schildkraut2010: Schildkraut & Lifson (1965) monovalent correction; the name is historical
 #' - Wetmur1991: Classic salt correction method for monovalent cations
 #' - SantaLucia1996: DNA-specific salt correction
 #' - SantaLucia1998-1: Improved DNA salt correction
 #' - SantaLucia1998-2: Alternative DNA salt correction (requires sequence information)
-#' - Owczarzy2004: Comprehensive salt correction including effects of divalent cations (requires sequence information)
+#' - Owczarzy2004: Sodium correction from Owczarzy et al. (2004) (requires sequence information)
 #' - Owczarzy2008: Updated comprehensive salt correction (requires sequence information)
-#' 
+#'
+#' For methods other than Owczarzy2008, the sodium-equivalent magnesium
+#' adjustment follows von Ahsen et al. (2001); it is separate from the
+#' original monovalent formulas.
+#'
+#' Owczarzy2008 is piecewise. Which of its three forms applies is decided by
+#' the ratio \eqn{R = \sqrt{[Mg^{2+}]_{free}} / [Mon]}, where \eqn{[Mon]} is
+#' the total monovalent concentration in molar and the free magnesium is what
+#' is left after chelation by dNTPs (\eqn{K_a = 3 \times 10^4}
+#' \eqn{M^{-1}}). Below 0.22 the monovalent term alone applies; between 0.22
+#' and 6 a competing form whose coefficients are themselves functions of
+#' \eqn{[Mon]}; at 6 and above the divalent-dominated form, in which
+#' \eqn{[Mon]} drops out of the expression entirely. A solution with
+#' magnesium and no monovalent cation at all therefore has a defined
+#' correction rather than none.
+#'
 #' @references
 #' 
 #' Schildkraut C, Lifson S. Dependence of the melting temperature of DNA on salt concentration.
@@ -59,6 +74,15 @@
 #' Owczarzy R, Moreira BG, Manthey JA, et al. Predicting stability of DNA duplexes in solutions
 #' containing magnesium and monovalent cations. Biochemistry. 2008;47(19):5336-5353.
 #' 
+#' SantaLucia J Jr, Allawi HT, Seneviratne PA (1996). Improved nearest-neighbor
+#' parameters for predicting DNA duplex stability. <doi:10.1021/bi951907q>
+#'
+#' Owczarzy R et al. (2004). Effects of sodium ions on DNA duplex oligomers:
+#' improved predictions of melting temperatures. <doi:10.1021/bi034621r>
+#'
+#' von Ahsen N, Wittwer CT, Schutz E (2001). Oligonucleotide melting
+#' temperatures under PCR conditions. <doi:10.1093/clinchem/47.11.1956>
+#'
 #' @author Junhui Li
 #' 
 #' @examples
@@ -103,6 +127,51 @@ salt_correct <- function(Na=0,
     Mon <- Mon+120*sqrt(Mg-dNTPs)
   }
   mon <- Mon/1000
+
+  # Owczarzy 2008 is resolved before the monovalent guard below, because it is
+  # the one method that is defined for a solution containing no monovalent
+  # cation at all. Which of its three forms applies is decided by
+  # R = sqrt([Mg2+]free) / [Mon]: below 0.22 the monovalent term alone,
+  # between 0.22 and 6 a competing form whose coefficients depend on [Mon],
+  # and at 6 and above the divalent form with the published constants. When
+  # Mon is zero the ratio is infinite and the divalent form is the right one;
+  # falling through to `corr <- 0` would silently discard a magnesium
+  # correction that is genuinely present.
+  if (method == "Owczarzy2008"){
+    m7 <- c(3.92, -0.911, 6.26, 1.42, -48.2, 52.5, 8.31)
+    dntps <- dNTPs*1e-3
+    ka = 3e4
+    # free Mg2+ remaining after chelation by dNTPs (Ka = 3e4 /M)
+    mg <- (sqrt((ka*dntps-ka*mg+1)**2+4*ka*mg)-(ka*dntps-ka*mg+1))/(2*ka)
+    if (mg <= 0){
+      # No free magnesium, either because none was added or because the dNTPs
+      # took all of it. The divalent terms vanish and what remains is the
+      # monovalent expression, which is itself undefined without a monovalent
+      # cation.
+      corr <- if (mon == 0) 0 else
+        (4.29*ptGC/100-3.95)*1e-5*log(mon)+9.40e-6*log(mon)**2
+      return(corr)
+    }
+    R <- if (mon > 0) sqrt(mg)/mon else Inf
+    if (R < 0.22){
+      corr <- (4.29*ptGC/100-3.95)*1e-5*log(mon)+9.40e-6*log(mon)**2
+    }else{
+      if (R < 6.0){
+        # Competing regime: three of the seven coefficients are themselves
+        # functions of the monovalent concentration.
+        m7[1] <- 3.92*(0.843-0.352*sqrt(mon)*log(mon))
+        m7[4] <- 1.42*(1.279-4.03e-3*log(mon)-8.03e-3*log(mon)**2)
+        m7[7] <- 8.31*(0.486-0.258*log(mon)+5.25e-3*log(mon)**3)
+      }
+      # R >= 6 keeps the published constants unchanged. This branch used to be
+      # absent, which left `corr` unassigned and turned every divalent-
+      # dominated Tm into NA by way of the error it raised.
+      corr <- (m7[1]+m7[2]*log(mg)+(ptGC/100)*(m7[3]+m7[4]*log(mg))+
+               (1/(2.0*(nSeq-1)))*(m7[5]+m7[6]*log(mg)+m7[7]*log(mg)**2))*1e-5
+    }
+    return(corr)
+  }
+
   if (mon == 0){
     corr <-  0
   } else {
@@ -118,20 +187,6 @@ salt_correct <- function(Na=0,
       corr <- 0.368*(nSeq-1)*log(mon)
     }else if (method == "Owczarzy2004"){
       corr <- (4.29*ptGC/100-3.95)*1e-5*log(mon)+9.40e-6*log(mon) ^ 2
-    }else if(method == "Owczarzy2008"){
-      m7 <- c(3.92, -0.911, 6.26, 1.42, -48.2, 52.5, 8.31)
-      dntps <- dNTPs*1e-3
-      ka = 3e4
-      mg <- (sqrt((ka*dntps-ka*mg+1)**2+4*ka*mg)-(ka*dntps-ka*mg+1))/(2*ka)
-      R <- if (Mon > 0) sqrt(mg)/mon
-      if (R < 0.22){
-        corr <- (4.29*ptGC/100-3.95)*1e-5*log(mon)+9.40e-6*log(mon)**2
-      }else if (R >= 0.22 && R < 6.0){
-        m7[1] <- 3.92*(0.843-0.352*sqrt(mon)*log(mon))
-        m7[4] <- 1.42*(1.279-4.03e-3*log(mon)-8.03e-3*log(mon)**2)
-        m7[7] <- 8.31*(0.486-0.258*log(mon)+5.25e-3*log(mon)**3)
-        corr <- (m7[1]+m7[2]*log(mg)+(ptGC/100)*(m7[3]+m7[4]*log(mg))+(1/(2.0*(nSeq-1))) *(m7[5]+m7[6]*log(mg)+m7[7]*log(mg)**2))*1e-5
-      }
     }
   }
   return(corr)
@@ -156,6 +211,35 @@ salt_correct <- function(Na=0,
     Mon <- Mon + 120 * sqrt(Mg - dNTPs)
   }
   mon <- Mon / 1000
+
+  # Owczarzy2008 first, and before the `mon == 0` guard: see the long comment
+  # in salt_correct(). The two functions must stay in step, since the tests
+  # compare them sequence by sequence.
+  if (method == "Owczarzy2008") {
+    dntps <- dNTPs * 1e-3
+    ka <- 3e4
+    mg <- (sqrt((ka * dntps - ka * mg + 1)^2 + 4 * ka * mg) -
+             (ka * dntps - ka * mg + 1)) / (2 * ka)
+    if (mg <= 0) {
+      return(if (mon == 0) rep(0, n) else
+        (4.29 * gc_pct / 100 - 3.95) * 1e-5 * log(mon) + 9.40e-6 * log(mon)^2)
+    }
+    R <- if (mon > 0) sqrt(mg) / mon else Inf
+    if (R < 0.22) {
+      return((4.29 * gc_pct / 100 - 3.95) * 1e-5 * log(mon) +
+               9.40e-6 * log(mon)^2)
+    }
+    m1 <- 3.92; m4 <- 1.42; m7 <- 8.31
+    if (R < 6.0) {
+      m1 <- 3.92 * (0.843 - 0.352 * sqrt(mon) * log(mon))
+      m4 <- 1.42 * (1.279 - 4.03e-3 * log(mon) - 8.03e-3 * log(mon)^2)
+      m7 <- 8.31 * (0.486 - 0.258 * log(mon) + 5.25e-3 * log(mon)^3)
+    }
+    return((m1 - 0.911 * log(mg) + (gc_pct / 100) * (6.26 + m4 * log(mg)) +
+              (1 / (2.0 * (seq_len - 1))) *
+                (-48.2 + 52.5 * log(mg) + m7 * log(mg)^2)) * 1e-5)
+  }
+
   if (mon == 0) {
     return(rep(0, n))
   }
@@ -171,26 +255,6 @@ salt_correct <- function(Na=0,
     0.368 * (seq_len - 1) * log(mon)
   } else if (method == "Owczarzy2004") {
     (4.29 * gc_pct / 100 - 3.95) * 1e-5 * log(mon) + 9.40e-6 * log(mon)^2
-  } else if (method == "Owczarzy2008") {
-    dntps <- dNTPs * 1e-3
-    ka <- 3e4
-    mg <- (sqrt((ka * dntps - ka * mg + 1)^2 + 4 * ka * mg) -
-             (ka * dntps - ka * mg + 1)) / (2 * ka)
-    R <- sqrt(mg) / mon
-    if (R < 0.22) {
-      (4.29 * gc_pct / 100 - 3.95) * 1e-5 * log(mon) + 9.40e-6 * log(mon)^2
-    } else if (R < 6.0) {
-      m1 <- 3.92 * (0.843 - 0.352 * sqrt(mon) * log(mon))
-      m4 <- 1.42 * (1.279 - 4.03e-3 * log(mon) - 8.03e-3 * log(mon)^2)
-      m7 <- 8.31 * (0.486 - 0.258 * log(mon) + 5.25e-3 * log(mon)^3)
-      (m1 - 0.911 * log(mg) + (gc_pct / 100) * (6.26 + m4 * log(mg)) +
-         (1 / (2.0 * (seq_len - 1))) *
-           (-48.2 + 52.5 * log(mg) + m7 * log(mg)^2)) * 1e-5
-    } else {
-      # scalar salt_correct() leaves 'corr' undefined here (error caught to
-      # NA per sequence); reproduce as NA so Tm becomes NA
-      rep(NA_real_, n)
-    }
   } else {
     stop("unknown salt correction method: ", method)
   }

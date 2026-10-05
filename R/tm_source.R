@@ -515,6 +515,17 @@
 #' @return A \code{GRanges}.
 #' @keywords internal
 .tm_finish <- function(gr, keep_sequence, model) {
+  # Every task re-enters tm_calculate(), which means every argument in `model`
+  # counts as supplied there. tm_calculate() warns when salt_method is named
+  # but cannot apply to tm_gc, so leaving it in `model` would repeat that
+  # warning once per task. It is dropped where it would have no effect
+  # anyway: without `userset`, tm_gc() takes the correction published with
+  # the variant whatever this says.
+  # "none" is kept: it is a request to drop the correction, which tm_gc()
+  # honours and does not warn about.
+  if (identical(model$method, "tm_gc") && is.null(model$userset) &&
+      !identical(model$salt_method, "none"))
+    model[["salt_method"]] <- NULL
   out <- do.call(TmCalculator::tm_calculate, c(list(input_seq = gr), model))$gr
   if (!keep_sequence) { out$sequence <- NULL; out$complement <- NULL }
   out

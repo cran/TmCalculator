@@ -9,9 +9,12 @@
 // single source of truth for those formulas.
 //
 // Semantics preserved from the R implementation:
-//  * A key present in both the NN and IMM tables contributes from both
-//    (independent lookups, as in R).
-//  * Keys not found in any table are silently skipped.
+//  * A key present in both the NN and IMM tables is taken from the NN table
+//    only; a stack has one delta_H and delta_S.
+//  * A stack key is looked up in both orientations (see rev_key below),
+//    because a stack and its character reversal are the same physical stack
+//    and the published tables store only one of the two. A key neither table
+//    holds marks the sequence (nostack = 1) rather than contributing zero.
 //  * A missing initiation row ('init', 'init_5T/A', ...) marks the sequence
 //    as failed (ok = 0), matching the R behavior where the subscript
 //    error/NA was converted to NA by tryCatch.
@@ -28,21 +31,41 @@ using namespace Rcpp;
 
 namespace {
 
+// A key "XY/WZ" denotes 5'-XY-3' paired with 3'-WZ-5'. Reading the same
+// physical stack from the other strand reverses the whole key: the bottom
+// strand 3'-WZ-5' read 5'->3' is "ZW", and the top strand read 3'->5' is "YX".
+// So "XY/WZ" and its character reversal "ZW/YX" name the same stack, which is
+// the rule Biopython's Tm_NN applies at lookup time (neighbors[::-1]).
+inline std::string rev_key(const std::string& k) {
+  return std::string(k.rbegin(), k.rend());
+}
+
 struct Tbl {
   std::unordered_map<std::string, std::pair<double, double> > m;
+  // Whether a miss may be retried against the reversed key. True for every
+  // table that stores each stack in one orientation only, which is all of
+  // them except the Zuber end-effect table: that one already lists both
+  // orientations of most of its keys, so a reversed lookup there could return
+  // a value belonging to a different stack rather than the same one.
+  bool rev_ok;
+  Tbl() : rev_ok(true) {}
   bool get(const std::string& key, double& dh, double& ds) const {
     std::unordered_map<std::string, std::pair<double, double> >::const_iterator
         it = m.find(key);
-    if (it == m.end()) return false;
+    if (it == m.end()) {
+      if (!rev_ok || key.size() < 2) return false;
+      it = m.find(rev_key(key));
+      if (it == m.end()) return false;
+    }
     dh = it->second.first;
     ds = it->second.second;
     return true;
   }
-  bool has(const std::string& key) const { return m.find(key) != m.end(); }
 };
 
-Tbl make_tbl(const List& L) {
+Tbl make_tbl(const List& L, bool rev_ok = true) {
   Tbl t;
+  t.rev_ok = rev_ok;
   // An absent or empty key vector yields an empty table (used for parameter
   // sets that define no end effects); guard against R NULL reaching here.
   if (!L.containsElementNamed("keys") ||
@@ -92,19 +115,26 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     stop("'seqs' and 'cseqs' must have the same length");
 
   const Tbl nn_t  = make_tbl(nn);
-  const Tbl tmm_t = make_tbl(tmm);
+  // Orientation carries meaning for terminal mismatches: see the TMM block.
+  const Tbl tmm_t = make_tbl(tmm, false);
   const Tbl imm_t = make_tbl(imm);
   const Tbl de_t  = make_tbl(de);
-  const Tbl end_t = make_tbl(end);   // empty for all reference-salt sets
+  // Empty for all reference-salt sets. No reversed retry: see Tbl::rev_ok.
+  const Tbl end_t = make_tbl(end, false);
 
-  // columns: dh, ds, nA, nC, nG, nT, len, ok
-  NumericMatrix out(nseq, 8);
+  // columns: dh, ds, nA, nC, nG, nT, len, ok, nostack
+  NumericMatrix out(nseq, 9);
   colnames(out) = CharacterVector::create("dh", "ds", "nA", "nC", "nG", "nT",
-                                          "len", "ok");
+                                          "len", "ok", "nostack");
 
   for (R_xlen_t si = 0; si < nseq; ++si) {
     double dh = 0.0, ds = 0.0;
     bool ok = true;
+    // A stack that no table defines, as opposed to a missing initiation row
+    // or a sequence too short to stack. Reported separately because it means
+    // something different: the duplex is outside the model rather than
+    // outside the parameter set.
+    bool nostack = false;
 
     if (CharacterVector::is_na(seqs[si]) || CharacterVector::is_na(cseqs[si])) {
       out(si, 7) = 0.0;
@@ -210,7 +240,6 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     if (de_t.get(key_left, th, ts)) {
       dh += th; ds += ts;
       ++lo;
-      key_left = (lo < hi) ? keys[lo] : std::string();
       s.erase(0, 1);
       c.erase(0, 1);
     }
@@ -219,19 +248,31 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
       if (hi > lo) --hi;
       s.erase(s.size() - 1, 1);
       c.erase(c.size() - 1, 1);
-      key_right = right_key(s, c);
     }
 
     // -- Terminal mismatches ------------------------------------------------
-    if (!key_left.empty() && tmm_t.get(key_left, th, ts)) {
+    // The TMM tables are keyed with the PENULTIMATE pair first and the
+    // terminal pair second: "AA/TA" is a Watson-Crick pair followed by a
+    // mismatch. That is the orientation you get by reading along whichever
+    // strand runs 5'->3' towards the duplex end -- the top strand at the
+    // right-hand end, so keys[hi-1] is already in it, and the bottom strand
+    // at the left-hand end, so the key there is the reversal of keys[lo].
+    //
+    // Unlike the stacking tables, the orientation carries meaning here and a
+    // reversed retry would be wrong, not merely redundant: a duplex whose
+    // terminal pair is Watson-Crick but whose penultimate pair is not has a
+    // terminal-first key of exactly the shape the table stores, so probing
+    // that spelling collects a terminal-mismatch penalty the molecule has not
+    // earned. Hence rev_ok = false on tmm_t.
+    if (lo < hi && tmm_t.get(rev_key(keys[lo]), th, ts)) {
       dh += th; ds += ts;
       ++lo;
       if (!s.empty()) s.erase(0, 1);
       if (!c.empty()) c.erase(0, 1);
     }
-    if (!key_right.empty() && tmm_t.get(key_right, th, ts)) {
+    if (lo < hi && tmm_t.get(keys[hi - 1], th, ts)) {
       dh += th; ds += ts;
-      if (hi > lo) --hi;
+      --hi;
       if (!s.empty()) s.erase(s.size() - 1, 1);
       if (!c.empty()) c.erase(c.size() - 1, 1);
     }
@@ -253,8 +294,22 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     // -- Initiation terms ---------------------------------------------------
     if (nn_t.get("init", th, ts)) { dh += th; ds += ts; } else ok = false;
 
-    if (!s.empty() && s[0] == 'T') {
-      if (nn_t.get("init_5T/A", th, ts)) { dh += th; ds += ts; }
+    // The 5'-T penalty is due once for each strand whose 5' end is T. The top
+    // strand's 5' end is s[0]; the bottom strand's is c[n-1], the last base of
+    // the complement. Charging only the first made Tm depend on which strand
+    // was handed over as the sequence. Every shipped parameter set carries
+    // this row as zero, so no shipped result moves; a user table with a
+    // non-zero value used to break the strand symmetry and now does not.
+    //
+    // Biopython's Tm_NN tests seq.endswith("A") for the second term, which is
+    // the same thing only when the terminal pair is Watson-Crick. Reading the
+    // complement directly is exact and symmetric by construction, since the
+    // other strand's first base IS this one.
+    int t5 = 0;
+    if (!s.empty() && s[0] == 'T') ++t5;
+    if (!c.empty() && c[c.size() - 1] == 'T') ++t5;
+    if (t5 > 0) {
+      if (nn_t.get("init_5T/A", th, ts)) { dh += th * t5; ds += ts * t5; }
       else ok = false;
     }
 
@@ -265,7 +320,27 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     if (last_base == 'G' || last_base == 'C') ++gc_ends;
     const int at_ends = 2 - gc_ends;
 
-    if (gc_ends == 0) {
+    // 'init_allA/T' and 'init_oneG/C' ask a question about the WHOLE duplex --
+    // does it contain any G.C pair at all -- not about its two ends. Up to
+    // 1.1.1 this branch reused gc_ends, so a duplex closed by A.T at both ends
+    // was charged init_allA/T no matter how much G+C sat in the middle:
+    // ATGCGCGCAT/TACGCGCGTA was treated as an all-A/T duplex. Only
+    // DNA_NN_Breslauer_1986 gives the two rows different values (dS -20.1 vs
+    // -16.8), which is why no other parameter set could expose the mistake;
+    // there the error reached 4 degrees C. The test below is over base PAIRS,
+    // so a G or C that only appears in a mismatch does not make the duplex a
+    // G/C-containing one; for a perfect duplex it agrees with Biopython's
+    // gc_fraction(seq) == 0. Like every other initiation term it reads the
+    // trimmed duplex, i.e. what is left after dangling ends and terminal
+    // mismatches have been consumed.
+    bool any_gc_pair = false;
+    for (size_t i = 0; i < s.size() && i < c.size(); ++i) {
+      if ((s[i] == 'G' && c[i] == 'C') || (s[i] == 'C' && c[i] == 'G')) {
+        any_gc_pair = true;
+        break;
+      }
+    }
+    if (!any_gc_pair) {
       if (nn_t.get("init_allA/T", th, ts)) { dh += th; ds += ts; }
       else ok = false;
     } else {
@@ -278,9 +353,28 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     else ok = false;
 
     // -- Stacking / internal mismatch lookups -------------------------------
+    // One stack, one parameter. The two tables are consulted in order rather
+    // than both added: a stack has a single delta_H and delta_S, and where the
+    // two tables overlap they describe it in different chemistries. That
+    // happens for the G.U wobble stacks of the RNA sets, whose spellings also
+    // occur in the DNA internal-mismatch table (Peyret 1999), where they mean
+    // a DNA G.T mismatch. The nearest-neighbor set wins because it is the one
+    // chosen for the molecule. No DNA set overlaps the mismatch table in
+    // either orientation, so this changes nothing for DNA.
+    // A stack neither table defines is not treated as contributing zero. Of
+    // the 256 dinucleotide stacks over A/C/G/T, 116 have parameters and the
+    // remaining 140 all carry two adjacent mismatches, which the two-state
+    // nearest-neighbor model does not describe: the published sets measure a
+    // mismatch flanked by Watson-Crick pairs. Only the three tandem G.T
+    // stacks (GG/TT, GT/TG, TG/GT, from Allawi and SantaLucia 1997) have
+    // measured values, which is the same coverage MELTING 5 reports for DNA.
+    // Scoring the rest as zero overstates stability silently; the sequence is
+    // marked instead and reported as NA with a warning, which is what MELTING
+    // and Biopython do at whole-call granularity.
     for (size_t i = lo; i < hi; ++i) {
-      if (nn_t.get(keys[i], th, ts))  { dh += th; ds += ts; }
-      if (imm_t.get(keys[i], th, ts)) { dh += th; ds += ts; }
+      if (nn_t.get(keys[i], th, ts))       { dh += th; ds += ts; }
+      else if (imm_t.get(keys[i], th, ts)) { dh += th; ds += ts; }
+      else { ok = false; nostack = true; }
     }
 
     // -- Symmetry correction (flag precomputed in R) ------------------------
@@ -292,6 +386,7 @@ NumericMatrix cpp_tm_nn_dhds(CharacterVector seqs, CharacterVector cseqs,
     out(si, 0) = dh;
     out(si, 1) = ds;
     out(si, 7) = ok ? 1.0 : 0.0;
+    out(si, 8) = nostack ? 1.0 : 0.0;
   }
 
   return out;

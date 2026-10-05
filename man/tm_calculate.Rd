@@ -38,7 +38,7 @@ tm_calculate(
   Mg = 0,
   dNTPs = 0,
   salt_method = c("Schildkraut2010", "Wetmur1991", "SantaLucia1996", "SantaLucia1998-1",
-    "Owczarzy2004", "Owczarzy2008", "none"),
+    "SantaLucia1998-2", "Owczarzy2004", "Owczarzy2008", "none"),
   DMSO = 0,
   formamide_unit = list(value = 0, unit = "percent"),
   dmso_factor = 0.75,
@@ -175,16 +175,28 @@ Usersets override value sets. Default: NULL}
 \item{dNTPs}{Millimolar concentration of deoxynucleotide triphosphates. Default: 0}
 
 \item{salt_method}{Salt correction method for Tm. Default: "Schildkraut2010"
-Available options:
-- "none": Disables salt correction. Also selected automatically when the
-  chosen \code{nn_table} was fitted at the requested \code{Na}.
-- "Schildkraut2010": Updated salt correction method
-- "Wetmur1991": Classic salt correction method
-- "SantaLucia1996": DNA-specific salt correction
-- "SantaLucia1998-1": Improved DNA salt correction
-- "Owczarzy2004": Comprehensive salt correction
-- "Owczarzy2008": Updated comprehensive salt correction
-Default: "Schildkraut2010"}
+  Available options:
+  - "none": Disables salt correction. Also selected automatically when the
+    chosen \code{nn_table} was fitted at the requested \code{Na}.
+  - "Schildkraut2010": Schildkraut & Lifson (1965); historical identifier
+  - "Wetmur1991": Classic salt correction method
+  - "SantaLucia1996": DNA-specific salt correction
+  - "SantaLucia1998-1": Improved DNA salt correction, applied to Tm
+  - "SantaLucia1998-2": the same correction applied to the entropy of the
+    nearest-neighbor model rather than to Tm
+  - "Owczarzy2004": Comprehensive salt correction
+  - "Owczarzy2008": Updated comprehensive salt correction
+  Default: "Schildkraut2010"
+
+  With \code{method = "tm_gc"} the salt term is part of the published
+  formula selected by \code{variant}, so naming a \emph{different} one is
+  ignored there, with a warning, unless \code{userset} is supplied.
+  \code{"none"} (or \code{NA}) is not a substitution but a request to drop
+  the correction, and is honoured on either path without a warning. The two
+  Owczarzy corrections are not available to \code{"tm_gc"} at all: they
+  apply to the reciprocal of the melting temperature in kelvin, referenced
+  to the same duplex in 1 M Na+, and carry a duplex-length term the
+  GC-content formulas already have.}
 
 \item{DMSO}{Percent DMSO concentration in the reaction mixture. Default: 0}
 
@@ -396,12 +408,18 @@ details.
       \item "Wetmur1991"
       \item "SantaLucia1996"
       \item "SantaLucia1998-1"
-      \item "Owczarzy2004"
-      \item "Owczarzy2008"
+      \item "SantaLucia1998-2" (\code{method = "tm_nn"} only)
+      \item "Owczarzy2004" (\code{method = "tm_nn"} only)
+      \item "Owczarzy2008" (\code{method = "tm_nn"} only)
       \item "none" (also selected automatically when \code{nn_table} was
         fitted at the requested \code{Na})
     }
 }
+
+With \code{method = "tm_gc"} the salt term belongs to the published formula
+selected by \code{variant}, so naming a different one is ignored there, with
+a warning, unless \code{userset} is supplied. \code{"none"} and \code{NA}
+drop the correction and are honoured on either path.
 
 \strong{Formamide Unit Options:}
 \itemize{

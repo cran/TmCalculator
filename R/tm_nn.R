@@ -14,7 +14,7 @@
 #' condition-specific if and only if it carries a \code{salt_mM} attribute.
 #'
 #' \strong{Reference-salt sets} (no \code{salt_mM}; Breslauer 1986,
-#' Sugimoto 1996, Allawi 1998, SantaLucia 2004, Freier 1986, Xia 1998,
+#' Sugimoto 1996, Allawi 1997 (legacy name: Allawi_1998), SantaLucia 2004, Freier 1986, Xia 1998,
 #' Chen 2012, Zuber 2022, Sugimoto 1995) were fitted at a single reference
 #' sodium concentration, and other conditions are reached by applying one of
 #' the \code{salt_method} correction formulas.
@@ -32,8 +32,12 @@
 #' As a rule of thumb, pick the set whose fitted salt is closest to your
 #' experimental condition rather than correcting a distant one.
 #' 
-#' @param gr_seq Pre-processed sequence(s) in 5' to 3' direction. This should be the output from
-#'   to_genomic_ranges() function.
+#' @param gr_seq Sequence(s) in 5' to 3' direction, as the \code{GRanges} that
+#'   \code{\link{to_genomic_ranges}} returns. A character vector of
+#'   sequences, a path to a FASTA file, or genomic coordinate strings are also
+#'   accepted and converted for you. To pair a sequence with a complement of
+#'   your own, build the object explicitly:
+#'   \code{to_genomic_ranges(seq, complement_seq = cmp)}.
 #' 
 #' @param ambiguous Logical value controlling how ambiguous bases are handled:
 #'   - TRUE: Ambiguous bases (e.g., N, R, Y) are included in calculations
@@ -69,7 +73,8 @@
 #'   DNA/DNA hybridizations, reference salt:
 #'   - "DNA_NN_Breslauer_1986": Original DNA/DNA parameters
 #'   - "DNA_NN_Sugimoto_1996": Improved DNA/DNA parameters
-#'   - "DNA_NN_Allawi_1998": DNA/DNA parameters with internal mismatch corrections
+#'   - "DNA_NN_Allawi_1998": Watson-Crick parameters from Allawi & SantaLucia
+#'     (1997), Table 1; the historical identifier is retained for compatibility
 #'   - "DNA_NN_SantaLucia_2004": Unified DNA/DNA parameters (default)
 #'
 #'   DNA/DNA hybridizations, melting-temperature optimized (Weber 2015):
@@ -106,7 +111,20 @@
 #'   - "RNA_DNA_NN_Weber_2019_LS": low salt, 100 mM
 #'   - "RNA_DNA_NN_Banerjee_2020": improved hybrid parameters fitted at a
 #'     physiological condition (100 mM NaCl), Banerjee et al. (2020)
-#' 
+#'
+#'   For every hybrid set the sequence you supply must be the \strong{RNA}
+#'   strand, written 5' to 3' and spelled with T in place of U; its complement
+#'   is then the DNA strand, read 3' to 5'. The published keys are indexed the
+#'   same way, RNA on top: \code{"AG/TC"} means 5'-rAG-3' paired with
+#'   3'-dTC-5'. Unlike DNA/DNA and RNA/RNA parameters, hybrid parameters are
+#'   \emph{not} invariant under reversing a key, because reversing it swaps
+#'   which strand carries the ribose. Supplying the DNA strand therefore does
+#'   not give the same answer: it silently reports the melting temperature of
+#'   the opposite hybrid. The asymmetry is large, since a purine-rich RNA
+#'   strand binds DNA more tightly than a pyrimidine-rich one (for example
+#'   5'-rAA-3'/3'-dTT-5' and 5'-rUU-3'/3'-dAA-5' differ by about
+#'   0.8 kcal/mol in delta G at 37 degrees C).
+#'
 #'
 #'   Alternatively, supply a matrix or data.frame of parameters directly. This
 #'   is the route for parameter sets the package does not ship, in particular
@@ -137,15 +155,21 @@
 #'   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
 #'   companion penultimate-pair end-effect table.
 #' @param tmm_table Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_Bommarito_2000"
-#'   These parameters account for mismatches at the ends of the duplex.
+#'   These 48 parameters come from SantaLucia & Peyret (2001), patent
+#'   WO2001094611A2, Tables 2-3. The historical identifier is retained;
+#'   Bommarito (2000) is the source of DNA dangling ends, not this table.
 #' 
 #' @param imm_table Thermodynamic parameters for internal mismatches. Default: "DNA_IMM_Peyret_1999"
-#'   These parameters account for mismatches within the duplex, including inosine mismatches.
+#'   This is a composite of six publications (1997-2005), not a single
+#'   Peyret (1999) table: 11 G.T, 8 G.A, 8 A.C, 8 C.T, 16 like-with-like
+#'   mismatches and 36 inosine entries. The A.C parameters are for pH 7.
 #' 
 #' @param de_table Thermodynamic parameters for dangling ends. Default: "DNA_DE_Bommarito_2000"
 #'   Available options:
 #'   - "DNA_DE_Bommarito_2000": Parameters for DNA dangling ends
-#'   - "RNA_DE_Turner_2010": Parameters for RNA dangling ends
+#'   - "RNA_DE_Turner_2010": NNDB Turner 2004 RNA dangling-end compilation;
+#'     2010 is the database publication year. Entropies are derived from
+#'     tabulated enthalpies and free energies at 37 degrees C
 #' 
 #' @param dnac_high Concentration of the higher concentrated strand in nM. Default: 25
 #'   Typically this is the primer (for PCR) or the probe concentration.
@@ -169,10 +193,13 @@
 #' 
 #' @param salt_method Salt correction method. Options are:
 #'   Available options:
-#'   - "Schildkraut2010": Updated salt correction method
+#'   - "Schildkraut2010": Schildkraut & Lifson (1965); historical identifier
 #'   - "Wetmur1991": Classic salt correction method
 #'   - "SantaLucia1996": DNA-specific salt correction
-#'   - "SantaLucia1998-1": Improved DNA salt correction
+#'   - "SantaLucia1998-1": Improved DNA salt correction, applied to Tm
+#'   - "SantaLucia1998-2": the same correction applied to the entropy of the
+#'     nearest-neighbor model rather than to Tm, which is why it is available
+#'     here and not in \code{\link{tm_gc}}
 #'   - "Owczarzy2004": Comprehensive salt correction
 #'   - "Owczarzy2008": Updated comprehensive salt correction
 #'   - "none": Disables salt correction entirely
@@ -193,11 +220,52 @@
 #' 
 #' @param dmso_factor Coefficient of melting temperature (Tm) decrease per percent DMSO.
 #'   Default: 0.75 (von Ahsen N, 2001, PMID:11673362)
-#'   Other published values: 0.5, 0.6, 0.675
+#'   Other accepted empirical coefficients: 0.5, 0.6, 0.65, 0.675
 #' 
 #' @param formamide_factor Coefficient of melting temperature (Tm) decrease per percent formamide.
-#'   Default: 0.65
-#'   Literature reports values ranging from 0.6 to 0.72
+#'   Default: 0.65, an empirical convention. Accepted alternatives are 0.6
+#'   and 0.72; these are not all estimates from the same publication.
+#'   The molar formula instead follows Blake & Delcourt (1996).
+#'
+#' @section What the initiation terms are charged on:
+#'
+#' A dangling end or a terminal mismatch is accounted for by its own parameter,
+#' from \code{de_table} or \code{tmm_table}, and the position it covers is then
+#' consumed. The initiation terms -- \code{init}, \code{init_A/T},
+#' \code{init_G/C}, \code{init_5T/A} and the \code{init_allA/T} /
+#' \code{init_oneG/C} pair -- are charged on what remains, that is, on the
+#' duplex that actually closes.
+#'
+#' This matters because the terminal AT penalty is a property of the closing
+#' base pair. SantaLucia and Hicks (2004) define it as applied for each end of
+#' a duplex that has a terminal AT, so the question it asks is whether the pair
+#' holding that end shut is AT or GC. A mismatched terminus is neither an AT
+#' nor a GC pair, and a dangling residue is not in a base pair at all, so
+#' neither one can carry the penalty. Charging it there would also double-count
+#' the end, since the terminal-mismatch and dangling-end parameters were
+#' measured as terminal and already carry that end's contribution.
+#'
+#' Some implementations index these terms on the sequence as supplied rather
+#' than on the trimmed duplex. That makes the melting temperature depend on
+#' which of the two strands is handed over as \code{gr_seq}: the same duplex,
+#' written from the other strand, can then come back with a different answer.
+#' The convention here is invariant under that swap by construction. See the
+#' 1.1.2 entry in NEWS for a worked example.
+#'
+#' @section Parameter provenance and limitations:
+#' Table identifiers are retained for compatibility and are not always literal
+#' author-year citations. The installed files
+#' \code{extdata/tm_nn_reference_audit.md} and
+#' \code{extdata/tm_nn_parameter_sources.tsv} record the source and verification
+#' status of every built-in parameter row.
+#'
+#' The audit identified unresolved numerical/model issues: the patent's
+#' \code{GG/CG} terminal-mismatch enthalpy is inconsistent with its printed
+#' free energy; \code{RNA_NN_Chen_2012} combines refitted Watson-Crick terms
+#' with GU terms fitted against Xia (1998); and Banerjee (2020) initiation
+#' conditions in Table 2 footnotes are not reproduced by the current per-end
+#' application. The audit corrects citations without changing these numerical
+#' results. Consult the audit before using these affected models.
 #'
 #' @details
 #' 
@@ -205,7 +273,7 @@
 #'  
 #'  DNA_NN_Sugimoto_1996: Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>
 #'  
-#'  DNA_NN_Allawi_1998: Allawi H (1998) <doi:10.1093/nar/26.11.2694>
+#'  DNA_NN_Allawi_1998: Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>
 #'  
 #'  DNA_NN_SantaLucia_2004: SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>
 #'  
@@ -215,7 +283,7 @@
 #'  
 #'  RNA_NN_Chen_2012: Chen JL (2012) <doi:10.1021/bi3002709>
 #'  
-#'  RNA_DNA_NN_Sugimoto_1995: Sugimoto N (1995)<doi:10.1016/S0048-9697(98)00088-6>
+#'  RNA_DNA_NN_Sugimoto_1995: Sugimoto N (1995)<doi:10.1021/bi00035a029>
 #'
 #'  The following sets were derived by melting-temperature optimization and are
 #'  fitted at the sodium concentration given in parentheses. They are not
@@ -248,69 +316,65 @@
 #'
 #'  DNA_NN_Ghosh_2020_PEG200 (100 mM, 40 wt% PEG200): Ghosh S (2020) <doi:10.1073/pnas.1920886117>
 #'
-#'  DNA_TMM_Bommarito_2000: Bommarito S (2000)  <doi:10.1093/nar/28.9.1929>
+#'  DNA_TMM_Bommarito_2000: SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)
 #'  
-#'  DNA_IMM_Peyret_1999: Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>
+#'  DNA_IMM_Peyret_1999: Allawi H T & SantaLucia J Jr (1997, G.T) <doi:10.1021/bi962590c>; (1998, G.A) <doi:10.1021/bi9724873>; (1998, A.C) <doi:10.1021/bi9803729>; (1998, C.T) <doi:10.1093/nar/26.11.2694>; Peyret N et al. (1999, A.A/C.C/G.G/T.T) <doi:10.1021/bi9825091>; Watkins N E Jr & SantaLucia J Jr (2005, inosine) <doi:10.1093/nar/gki918>
 #'  
 #'  DNA_DE_Bommarito_2000: Bommarito S (2000) <doi:10.1093/nar/28.9.1929>
 #'  
-#'  RNA_DE_Turner_2010: Turner D H (2010) <doi:10.1093/nar/gkp892>
+#'  RNA_DE_Turner_2010: NNDB Turner 2004 dangling-end compilation; Turner D H & Mathews D H (2010, database description) <doi:10.1093/nar/gkp892>
 #' 
-#' @references 
-#' 
-#' Breslauer K J , Frank R , Blocker H , et al. Predicting DNA duplex stability from the base sequence.[J]. Proceedings of the National Academy of Sciences, 1986, 83(11):3746-3750.
-#' 
-#' Sugimoto N , Nakano S , Yoneyama M , et al. Improved Thermodynamic Parameters and Helix Initiation Factor to Predict Stability of DNA Duplexes[J]. Nucleic Acids Research, 1996, 24(22):4501-5.
-#' 
-#' Allawi, H. Thermodynamics of internal C.T mismatches in DNA[J]. Nucleic Acids Research, 1998, 26(11):2694-2701.
-#' 
-#' Hicks L D , Santalucia J . The thermodynamics of DNA structural motifs.[J]. Annual Review of Biophysics & Biomolecular Structure, 2004, 33(1):415-440.
-#' 
-#' Freier S M , Kierzek R , Jaeger J A , et al. Improved free-energy parameters for predictions of RNA duplex stability.[J]. Proceedings of the National Academy of Sciences, 1986, 83(24):9373-9377.
-#' 
-#' Xia T , Santalucia , J , Burkard M E , et al. Thermodynamic Parameters for an Expanded Nearest-Neighbor Model for Formation of RNA Duplexes with Watson-Crick Base Pairs,[J]. Biochemistry, 1998, 37(42):14719-14735.
-#' 
-#' Chen J L , Dishler A L , Kennedy S D , et al. Testing the Nearest Neighbor Model for Canonical RNA Base Pairs: Revision of GU Parameters[J]. Biochemistry, 2012, 51(16):3508-3522.
-#' 
-#' Bommarito S, Peyret N, Jr S L. Thermodynamic parameters for DNA sequences with dangling ends[J]. Nucleic Acids Research, 2000, 28(9):1929-1934.
-#' 
-#' Turner D H , Mathews D H . NNDB: the nearest neighbor parameter database for predicting stability of nucleic acid secondary structure[J]. Nucleic Acids Research, 2010, 38(Database issue):D280-D282.
-#' 
-#' Sugimoto N , Nakano S I , Katoh M , et al. Thermodynamic Parameters To Predict Stability of RNA/DNA Hybrid Duplexes[J]. Biochemistry, 1995, 34(35):11211-11216.
-#' 
-#' Allawi H, SantaLucia J: Thermodynamics and NMR of internal G-T mismatches in DNA. Biochemistry 1997, 36:10581-10594.
-#' 
-#' Weber G. Optimization method for obtaining nearest-neighbour DNA entropies and enthalpies directly from melting temperatures. Bioinformatics, 2015, 31(6):871-877.
-#' 
-#' Ferreira I, Jolley E A, Znosko B M, Weber G. Replacing salt correction factors with optimized RNA nearest-neighbour enthalpy and entropy parameters. Chemical Physics, 2019, 521:69-76.
-#' 
-#' Basilio Barbosa V, de Oliveira Martins E, Weber G. Nearest-neighbour parameters optimized for melting temperature prediction of DNA/RNA hybrids at high and low salt concentrations. Biophysical Chemistry, 2019, 251:106189.
-#' 
-#' Banerjee D, Tateishi-Karimata H, Ohyama T, et al. Improved nearest-neighbor parameters for the stability of RNA/DNA hybrids under a physiological condition. Nucleic Acids Research, 2020, 48(21):12042-12054.
-#' 
-#' Zuber J, Schroeder S J, Sun H, Turner D H, Mathews D H. Nearest neighbor rules for RNA helix folding thermodynamics: improved end effects. Nucleic Acids Research, 2022, 50(9):5251-5262.
-#' 
-#' Ghosh S, Takahashi S, Ohyama T, et al. Nearest-neighbor parameters for predicting DNA duplex stability in diverse molecular crowding conditions. Proceedings of the National Academy of Sciences, 2020, 117(25):14194-14201.
-#' 
-#' Ghosh S, Takahashi S, Banerjee D, et al. Nearest-neighbor parameters for the prediction of RNA duplex stability in diverse in vitro and cellular-like crowding conditions. Nucleic Acids Research, 2023, 51(9):4101-4111.
-#' 
-#' Santalucia N E W J . Nearest-neighbor thermodynamics of deoxyinosine pairs in DNA duplexes[J]. Nucleic Acids Research, 2005, 33(19):6258-67.
-#' 
-#' Peyret N , Seneviratne P A , Allawi H T , et al. Nearest-Neighbor Thermodynamics and NMR of DNA Sequences with Internal A-A, C-C, G-G, and T-T Mismatches, [J]. Biochemistry, 1999, 38(12):3468-3477.
+#' @references
 #'
-#' Weber G. Optimization method for obtaining nearest-neighbour DNA entropies and enthalpies directly from melting temperatures[J]. Bioinformatics, 2015, 31(6):871-877.
+#' Breslauer KJ, Frank R, Blocker H, Marky LA (1986). Predicting DNA duplex stability from the base sequence. PNAS 83:3746-3750. <doi:10.1073/pnas.83.11.3746>
 #'
-#' Ferreira I, Jolley E A, Znosko B M, et al. Replacing salt correction factors with optimized RNA nearest-neighbour enthalpy and entropy parameters[J]. Chemical Physics, 2019, 521:69-76.
+#' Sugimoto N, Nakano S, Yoneyama M, Honda K (1996). Improved thermodynamic parameters and helix initiation factor to predict stability of DNA duplexes. NAR 24:4501-4505. <doi:10.1093/nar/24.22.4501>
 #'
-#' Basilio Barbosa V, de Oliveira Martins E, Weber G. Nearest-neighbour parameters optimized for melting temperature prediction of DNA/RNA hybrids at high and low salt concentrations[J]. Biophysical Chemistry, 2019, 251:106189.
+#' Allawi HT, SantaLucia J Jr (1997). Thermodynamics and NMR of internal G.T mismatches in DNA. Biochemistry 36:10581-10594. Table 1: Watson-Crick parameters; Table 5: G.T mismatches. <doi:10.1021/bi962590c>
 #'
-#' Banerjee D, Tateishi-Karimata H, Ohyama T, Ghosh S, Endoh T, Takahashi S, Sugimoto N. Improved nearest-neighbor parameters for the stability of RNA/DNA hybrids under a physiological condition[J]. Nucleic Acids Research, 2020, 48(21):12042-12054.
+#' SantaLucia J Jr (1998). A unified view of polymer, dumbbell, and oligonucleotide DNA nearest-neighbor thermodynamics. PNAS 95:1460-1465. <doi:10.1073/pnas.95.4.1460>
 #'
-#' Zuber J, Schroeder S J, Sun H, Turner D H, Mathews D H. Nearest neighbor rules for RNA helix folding thermodynamics: improved end effects[J]. Nucleic Acids Research, 2022, 50(9):5251-5262.
+#' SantaLucia J Jr, Hicks D (2004). The thermodynamics of DNA structural motifs. Annual Review of Biophysics and Biomolecular Structure 33:415-440. <doi:10.1146/annurev.biophys.32.110601.141800>
 #'
-#' Ghosh S, Takahashi S, Banerjee D, Ohyama T, Endoh T, Tateishi-Karimata H, Sugimoto N. Nearest-neighbor parameters for the prediction of RNA duplex stability in diverse in vitro and cellular-like crowding conditions[J]. Nucleic Acids Research, 2023, 51(9):4101-4111.
+#' Freier SM et al. (1986). Improved free-energy parameters for predictions of RNA duplex stability. PNAS 83:9373-9377. <doi:10.1073/pnas.83.24.9373>
 #'
-#' Ghosh S, Takahashi S, Ohyama T, Endoh T, Tateishi-Karimata H, Sugimoto N. Nearest-neighbor parameters for predicting DNA duplex stability in diverse molecular crowding conditions[J]. Proceedings of the National Academy of Sciences, 2020, 117(25):14194-14201.
+#' Xia T et al. (1998). Thermodynamic parameters for an expanded nearest-neighbor model for formation of RNA duplexes with Watson-Crick base pairs. Biochemistry 37:14719-14735. <doi:10.1021/bi9809425>
+#'
+#' Chen JL et al. (2012). Testing the nearest neighbor model for canonical RNA base pairs: revision of GU parameters. Biochemistry 51:3508-3522. <doi:10.1021/bi3002709>
+#'
+#' Sugimoto N et al. (1995). Thermodynamic parameters to predict stability of RNA/DNA hybrid duplexes. Biochemistry 34:11211-11216. <doi:10.1021/bi00035a029>
+#'
+#' Allawi HT, SantaLucia J Jr (1998). Nearest-neighbor thermodynamics of internal A.C mismatches in DNA: sequence dependence and pH effects. Biochemistry 37:9435-9444. <doi:10.1021/bi9803729>
+#'
+#' Allawi HT, SantaLucia J Jr (1998). Nearest neighbor thermodynamic parameters for internal G.A mismatches in DNA. Biochemistry 37:2170-2179. <doi:10.1021/bi9724873>
+#'
+#' Allawi HT, SantaLucia J Jr (1998). Thermodynamics of internal C.T mismatches in DNA. NAR 26:2694-2701. <doi:10.1093/nar/26.11.2694>
+#'
+#' Peyret N, Seneviratne PA, Allawi HT, SantaLucia J Jr (1999). Nearest-neighbor thermodynamics and NMR of DNA sequences with internal A.A, C.C, G.G, and T.T mismatches. Biochemistry 38:3468-3477. <doi:10.1021/bi9825091>
+#'
+#' Watkins NE Jr, SantaLucia J Jr (2005). Nearest-neighbor thermodynamics of deoxyinosine pairs in DNA duplexes. NAR 33:6258-6267. <doi:10.1093/nar/gki918>
+#'
+#' SantaLucia J Jr, Peyret N (2001). Method and system for predicting nucleic acid hybridization thermodynamics and computer-readable storage medium for use therein. Patent WO2001094611A2, published December 13, 2001, Tables 2-3. \url{https://patents.google.com/patent/WO2001094611A2/en}
+#'
+#' Bommarito S, Peyret N, SantaLucia J Jr (2000). Thermodynamic parameters for DNA sequences with dangling ends. NAR 28:1929-1934. <doi:10.1093/nar/28.9.1929>
+#'
+#' Turner DH, Mathews DH (2010). NNDB: the nearest neighbor parameter database for predicting stability of nucleic acid secondary structure. NAR 38:D280-D282. <doi:10.1093/nar/gkp892> The RNA dangling-end values are the Turner 2004 compilation: \url{https://rna.urmc.rochester.edu/NNDB/rna_2004/rna_2004_dangling_ends.html}
+#'
+#' Weber G (2015). Optimization method for obtaining nearest-neighbour DNA entropies and enthalpies directly from melting temperatures. Bioinformatics 31:871-877. <doi:10.1093/bioinformatics/btu751>
+#'
+#' Ferreira I, Jolley EA, Znosko BM, Weber G (2019). Replacing salt correction factors with optimized RNA nearest-neighbour enthalpy and entropy parameters. Chemical Physics 521:69-76. <doi:10.1016/j.chemphys.2019.01.016>
+#'
+#' Basilio Barbosa V, de Oliveira Martins E, Weber G (2019). Nearest-neighbour parameters optimized for melting temperature prediction of DNA/RNA hybrids at high and low salt concentrations. Biophysical Chemistry 251:106189. <doi:10.1016/j.bpc.2019.106189>
+#'
+#' Banerjee D et al. (2020). Improved nearest-neighbor parameters for the stability of RNA/DNA hybrids under a physiological condition. NAR 48:12042-12054. <doi:10.1093/nar/gkaa572>
+#'
+#' Zuber J, Schroeder SJ, Sun H, Turner DH, Mathews DH (2022). Nearest neighbor rules for RNA helix folding thermodynamics: improved end effects. NAR 50:5251-5262. <doi:10.1093/nar/gkac261>
+#'
+#' Ghosh S et al. (2020). Nearest-neighbor parameters for predicting DNA duplex stability in diverse molecular crowding conditions. PNAS 117:14194-14201. <doi:10.1073/pnas.1920886117>
+#'
+#' Ghosh S et al. (2023). Nearest-neighbor parameters for the prediction of RNA duplex stability in diverse in vitro and cellular-like crowding conditions. NAR 51:4101-4111. <doi:10.1093/nar/gkad020>
+#'
+#' Blake RD, Delcourt SG (1996). Thermodynamic effects of formamide on DNA stability. NAR 24:2095-2103. <doi:10.1093/nar/24.11.2095>
 #'
 #' @return A \code{TmCalculator} list with:
 #'   \item{\code{gr}}{The input \code{GRanges} with metadata columns \code{Tm}
@@ -432,6 +496,7 @@ tm_nn <- function(gr_seq,
                                         "Wetmur1991",
                                         "SantaLucia1996",
                                         "SantaLucia1998-1",
+                                        "SantaLucia1998-2",
                                         "Owczarzy2004",
                                         "Owczarzy2008",
                                         "none"),
@@ -439,6 +504,8 @@ tm_nn <- function(gr_seq,
                   formamide_unit = list(value = 0, unit = "percent"),
                   dmso_factor    = 0.75,
                   formamide_factor     = 0.65) {
+
+  gr_seq <- .as_gr_seq(gr_seq)
 
   # -- Validate args once ----------------------------------------------------
   # Each table argument is either a built-in name or a user-supplied matrix.
@@ -536,6 +603,40 @@ tm_nn <- function(gr_seq,
   )
   tm <- chunk_res$Tm
   gc <- chunk_res$GC
+
+  # -- Say why a Tm is missing ----------------------------------------------
+  # An NA used to be returned silently, so a caller who did not test for it
+  # carried it into a mean or a plot without ever being told. The two causes
+  # are reported separately because they call for different fixes: a sequence
+  # the model cannot evaluate is an input problem, an undefined salt
+  # correction is a condition problem.
+  if (isTRUE(chunk_res$n_no_thermo > 0)) {
+    warning(sprintf(paste0(
+      "Tm is NA for %d region(s): fewer than two A/C/G/T/I bases remained ",
+      "after cleaning, or the parameter set lacks an initiation term the ",
+      "sequence requires. GC is still reported for these regions."),
+      chunk_res$n_no_thermo), call. = FALSE)
+  }
+  if (isTRUE(chunk_res$n_no_stack > 0)) {
+    warning(sprintf(paste0(
+      "Tm is NA for %d region(s) containing a dinucleotide stack that no ",
+      "parameter set defines. The published sets measure a mismatch flanked ",
+      "by Watson-Crick pairs; two adjacent mismatches are outside the ",
+      "nearest-neighbor model, and only the three tandem G.T stacks have ",
+      "measured values. Scoring such a stack as contributing nothing would ",
+      "overstate stability, so the melting temperature is not reported. GC ",
+      "is still reported for these regions."),
+      chunk_res$n_no_stack), call. = FALSE)
+  }
+  if (isTRUE(chunk_res$n_no_salt > 0)) {
+    warning(sprintf(paste0(
+      "Tm is NA for %d region(s): the '%s' salt correction is undefined at ",
+      "Na = %s, K = %s, Tris = %s, Mg = %s, dNTPs = %s mM. GC is still ",
+      "reported for these regions."),
+      chunk_res$n_no_salt, salt_fn_eff, Na, K, Tris, Mg, dNTPs),
+      call. = FALSE)
+  }
+
   # One mcols<- assignment rather than two `$<-`: each `$<-` replaces the
   # whole metadata DataFrame and revalidates the GRanges.
   mc_out <- GenomicRanges::mcols(gr_seq)
@@ -545,16 +646,16 @@ tm_nn <- function(gr_seq,
   
   nn_table_list <- list("DNA_NN_Breslauer_1986" = "Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>",
                         "DNA_NN_Sugimoto_1996" = "Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>",
-                        "DNA_NN_Allawi_1998" = "Allawi H (1998) <doi:10.1093/nar/26.11.2694>",
+                        "DNA_NN_Allawi_1998" = "Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>",
                         "DNA_NN_SantaLucia_2004" = "SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>",
                         "RNA_NN_Freier_1986" = "Freier S (1986) <doi:10.1073/pnas.83.24.9373>",
                         "RNA_NN_Xia_1998" = "Xia T (1998) <doi:10.1021/bi9809425>",
                         "RNA_NN_Chen_2012" = "Chen JL (2012) <doi:10.1021/bi3002709>",
-                        "RNA_DNA_NN_Sugimoto_1995" = "Sugimoto N (1995)<doi:10.1016/S0048-9697(98)00088-6>",
-                        "DNA_TMM_Bommarito_2000" = "Bommarito S (2000)  <doi:10.1093/nar/28.9.1929>",
-                        "DNA_IMM_Peyret_1999" = "Peyret N (1999) <doi:10.1021/bi9825091> & Allawi H T (1997) <doi:10.1021/bi962590c> & Santalucia N (2005) <doi:10.1093/nar/gki918>",
+                        "RNA_DNA_NN_Sugimoto_1995" = "Sugimoto N (1995)<doi:10.1021/bi00035a029>",
+                        "DNA_TMM_Bommarito_2000" = "SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)",
+                        "DNA_IMM_Peyret_1999" = "Allawi H T & SantaLucia J Jr (1997, G.T) <doi:10.1021/bi962590c>; (1998, G.A) <doi:10.1021/bi9724873>; (1998, A.C) <doi:10.1021/bi9803729>; (1998, C.T) <doi:10.1093/nar/26.11.2694>; Peyret N et al. (1999, A.A/C.C/G.G/T.T) <doi:10.1021/bi9825091>; Watkins N E Jr & SantaLucia J Jr (2005, inosine) <doi:10.1093/nar/gki918>",
                         "DNA_DE_Bommarito_2000" = "Bommarito S (2000) <doi:10.1093/nar/28.9.1929>",
-                        "RNA_DE_Turner_2010" = "Turner D H (2010) <doi:10.1093/nar/gkp892>",
+                        "RNA_DE_Turner_2010" = "NNDB Turner 2004 dangling-end compilation; Turner D H & Mathews D H (2010, database description) <doi:10.1093/nar/gkp892>",
                         "DNA_NN_Weber_2015" = "Weber G (2015) <doi:10.1093/bioinformatics/btu751>",
                         "DNA_NN_Weber_OW04_69" = "Weber G (2015) <doi:10.1093/bioinformatics/btu751>, 69 mM [Na+]",
                         "DNA_NN_Weber_OW04_119" = "Weber G (2015) <doi:10.1093/bioinformatics/btu751>, 119 mM [Na+]",
@@ -707,18 +808,30 @@ tm_nn <- function(gr_seq,
                                formamide_factor = formamide_factor,
                                pt_gc = gc_salt)
 
-  # Reproduce the R core's failure semantics: any sequence whose evaluation
-  # errored (short/missing init rows) or whose salt correction is undefined
-  # (e.g. Owczarzy2008 with sqrt(Mg)/mon >= 6) gets NA for BOTH Tm and GC,
-  # exactly as tryCatch() around .tm_nn_core() did.
-  bad <- !ok
-  if (!is.null(corr_salt)) {
-    bad <- bad | is.na(corr_salt)
-  }
-  tm[bad] <- NA_real_
-  gc_out <- gc_salt
-  gc_out[bad] <- NA_real_
-  list(Tm = unname(tm), GC = unname(gc_out))
+  # A sequence the thermodynamic model cannot evaluate gets NA for Tm. GC does
+  # not follow it: base composition is a property of the sequence rather than
+  # of the model, and it is still the right answer for a sequence that is too
+  # short to melt or whose salt correction is undefined. Only where the
+  # sequence itself carries no countable base is GC NA, which is what
+  # gc_content() reports for the same input.
+  #
+  # The two counts are returned rather than warned about here so that the
+  # message names the arguments the caller actually passed. Under a BPPARAM
+  # each task warns for itself, which is the convention the N-region warning
+  # above already follows.
+  #
+  # A region is attributed to one cause only. A sequence with no countable
+  # base fails the model AND makes the two GC-dependent salt corrections
+  # undefined, and reporting it as a salt problem would be misleading: the
+  # conditions are fine, the sequence is not.
+  no_stack  <- res[, "nostack"] > 0
+  no_thermo <- !ok & !no_stack
+  no_salt   <- if (is.null(corr_salt)) rep(FALSE, length(tm)) else is.na(corr_salt)
+  no_salt   <- no_salt & !no_thermo & !no_stack
+  tm[no_thermo | no_stack | no_salt] <- NA_real_
+  list(Tm = unname(tm), GC = unname(gc_salt),
+       n_no_thermo = sum(no_thermo), n_no_stack = sum(no_stack),
+       n_no_salt = sum(no_salt))
 }
 
 # -- Pure-R chunk worker, kept as reference implementation --------------------
@@ -732,16 +845,22 @@ tm_nn <- function(gr_seq,
   m  <- length(chunk$sequence)
   tm <- rep(NA_real_, m)
   gc <- rep(NA_real_, m)
+  n_no_thermo <- 0L
   for (j in seq_len(m)) {
     seq_str  <- chunk$sequence[j]
     cseq_str <- chunk$complement[j]
     if (is.na(seq_str) || is.na(cseq_str)) {
+      n_no_thermo <- n_no_thermo + 1L
       next
     }
     # Same cleaning as the C++ core: uppercase, keep only A/C/G/T/I
     seq_str  <- gsub("[^ACGTI]", "", toupper(seq_str), perl = TRUE)
     cseq_str <- gsub("[^ACGTI]", "", toupper(cseq_str), perl = TRUE)
+    # GC is recorded before the Tm attempt, and survives its failure, to match
+    # the compiled path.
+    gc[j] <- .gc_vec(seq_str, ambiguous = ambiguous)
     if (nchar(seq_str) < 2L) {
+      n_no_thermo <- n_no_thermo + 1L
       next
     }
     result <- tryCatch(
@@ -751,12 +870,19 @@ tm_nn <- function(gr_seq,
                   dnac_high, dnac_low, self_comp,
                   Na, K, Tris, Mg, dNTPs, salt_fn = salt_fn,
                   DMSO, dmso_factor, formamide_factor, formamide_unit),
-      error = function(e) list(Tm = NA_real_, GC = NA_real_)
+      error = function(e) {
+        n_no_thermo <<- n_no_thermo + 1L
+        list(Tm = NA_real_, GC = gc[j])
+      }
     )
     tm[j] <- result$Tm
     gc[j] <- result$GC
   }
-  list(Tm = unname(tm), GC = unname(gc))
+  # n_no_stack and n_no_salt are always 0 here: this reference implementation
+  # does not separate the causes the way the compiled path does, and only $Tm
+  # and $GC are compared between the two.
+  list(Tm = unname(tm), GC = unname(gc),
+       n_no_thermo = n_no_thermo, n_no_stack = 0L, n_no_salt = 0L)
 }
 
 # -- Core single-sequence NN computation --------------------------------------
@@ -801,7 +927,14 @@ tm_nn <- function(gr_seq,
   # substring() is faster than strsplit -> paste for large n
   n     <- nchar(tmp_seq)
   n_int <- n - 1L
-  
+
+  # The compiled core bails here (ok = 0) when padding and trimming have left
+  # fewer than two aligned positions. Without the same guard, substring() with
+  # 1:0 recycles into a pair of nonsense keys instead of none, so the two
+  # implementations would disagree at |shift| >= nchar - 1.
+  if (n_int < 1L || nchar(tmp_cseq) != n)
+    stop("duplex has fewer than two aligned positions after shift", call. = FALSE)
+
   fwd  <- substring(tmp_seq, 1:n_int, 2:(n_int+1))          # forward strand
   #bwd <- substring(paste(rev(strsplit(tmp_seq, "", fixed=TRUE)[[1]]), collapse=""), 1:n_int, 2:(n_int+1))
   cfwd <- substring(tmp_cseq, 1:n_int, 2:(n_int+1))
@@ -815,55 +948,77 @@ tm_nn <- function(gr_seq,
   keys_t_right <- .right_key(tmp_seq, tmp_cseq, n)
   
   #for dang end
-  if(keys_t_left %in% rownames(de_tbl)) {
-    delta_h <- de_tbl[keys_t_left,1] + delta_h
-    delta_s <- de_tbl[keys_t_left,2] + delta_s
+  hit <- .tbl_row(de_tbl, keys_t_left)
+  if (!is.null(hit)) {
+    delta_h <- hit[[1]] + delta_h
+    delta_s <- hit[[2]] + delta_s
     keys_fr <- keys_fr[-1]
     keys_t_left <- keys_fr[1]
     tmp_seq  <- substring(tmp_seq,  2, n)
     tmp_cseq <- substring(tmp_cseq, 2, n)
   }
-  
-  if (keys_t_right %in% rownames(de_tbl)) {
-    delta_h <- de_tbl[keys_t_right, 1] + delta_h
-    delta_s <- de_tbl[keys_t_right, 2] + delta_s
+
+  hit <- .tbl_row(de_tbl, keys_t_right)
+  if (!is.null(hit)) {
+    delta_h <- hit[[1]] + delta_h
+    delta_s <- hit[[2]] + delta_s
     keys_fr <- keys_fr[-length(keys_fr)]
     n <- nchar(tmp_seq) - 1L
     tmp_seq <- substring(tmp_seq, 1, n)
     tmp_cseq <- substring(tmp_cseq, 1, n)
     keys_t_right <- .right_key(tmp_seq, tmp_cseq, n)
   }
-  
-  # for terminal mismatch
-  if(keys_t_left %in% rownames(tmm_tbl)) {
-    delta_h <- tmm_tbl[keys_t_left, 1] + delta_h
-    delta_s <- tmm_tbl[keys_t_left, 2] + delta_s
-    keys_fr <- keys_fr[-1]
-    n <- nchar(tmp_seq)
-    tmp_seq  <- substring(tmp_seq,  2, n)
-    tmp_cseq <- substring(tmp_cseq, 2, n)
+
+  # -- Terminal mismatches -----------------------------------------------
+  # The TMM tables are keyed with the PENULTIMATE pair first and the terminal
+  # pair second ("AA/TA" is a Watson-Crick pair then a mismatch), which is
+  # the orientation read along whichever strand runs 5'->3' towards that end:
+  # the top strand at the right-hand end, so the last key is already in it,
+  # and the bottom strand at the left-hand end, so the key there is the
+  # reversal of the first. Orientation carries meaning, so no reversed retry
+  # (rev_ok = FALSE): a duplex whose terminal pair is Watson-Crick but whose
+  # penultimate pair is not has a terminal-first key of exactly the shape the
+  # table stores, and would otherwise collect a penalty it has not earned.
+  if (length(keys_fr) > 0L) {
+    hit <- .tbl_row(tmm_tbl, .rev_str(keys_fr[1]), rev_ok = FALSE)
+    if (!is.null(hit)) {
+      delta_h <- hit[[1]] + delta_h
+      delta_s <- hit[[2]] + delta_s
+      keys_fr <- keys_fr[-1]
+      n <- nchar(tmp_seq)
+      tmp_seq  <- substring(tmp_seq,  2, n)
+      tmp_cseq <- substring(tmp_cseq, 2, n)
+    }
   }
-  
-  if(keys_t_right %in% rownames(tmm_tbl)) {
-    delta_h <- tmm_tbl[keys_t_right, 1] + delta_h
-    delta_s <- tmm_tbl[keys_t_right, 2] + delta_s
-    #keys_rf <- keys_rf[-1]
-    keys_fr <- keys_fr[-length(keys_fr)]
-    n <- nchar(tmp_seq)-1
-    tmp_seq <- substring(tmp_seq, 1, n)
-    tmp_cseq <- substring(tmp_cseq, 1, n)
+
+  if (length(keys_fr) > 0L) {
+    hit <- .tbl_row(tmm_tbl, keys_fr[length(keys_fr)], rev_ok = FALSE)
+    if (!is.null(hit)) {
+      delta_h <- hit[[1]] + delta_h
+      delta_s <- hit[[2]] + delta_s
+      keys_fr <- keys_fr[-length(keys_fr)]
+      n <- nchar(tmp_seq)-1
+      tmp_seq <- substring(tmp_seq, 1, n)
+      tmp_cseq <- substring(tmp_cseq, 1, n)
+    }
   }
-  
-  # for end effects (Zuber 2022): added, terminal pair NOT consumed
+
+  # for end effects (Zuber 2022): added, terminal pair NOT consumed.
+  # rev_ok = FALSE: this table already lists both orientations of most of its
+  # keys, so a reversed retry could return a different stack's value.
   if (nrow(end_tbl) > 0L) {
-    if (length(keys_fr) > 0L && keys_fr[1] %in% rownames(end_tbl)) {
-      delta_h <- end_tbl[keys_fr[1], 1] + delta_h
-      delta_s <- end_tbl[keys_fr[1], 2] + delta_s
+    if (length(keys_fr) > 0L) {
+      hit <- .tbl_row(end_tbl, keys_fr[1], rev_ok = FALSE)
+      if (!is.null(hit)) {
+        delta_h <- hit[[1]] + delta_h
+        delta_s <- hit[[2]] + delta_s
+      }
     }
     key_e_right <- .right_key(tmp_seq, tmp_cseq, nchar(tmp_seq))
-    if (key_e_right %in% rownames(end_tbl)) {
-      delta_h <- end_tbl[key_e_right, 1] + delta_h
-      delta_s <- end_tbl[key_e_right, 2] + delta_s
+    hit <- .tbl_row(end_tbl, key_e_right, rev_ok = FALSE)
+    if (!is.null(hit)) {
+      delta_h <- hit[[1]] + delta_h
+      delta_s <- hit[[2]] + delta_s
     }
   }
 
@@ -871,14 +1026,17 @@ tm_nn <- function(gr_seq,
   delta_h <- nn_tbl['init', 1] + delta_h
   delta_s <- nn_tbl['init', 2] + delta_s
   
-  if(substring(tmp_seq, 1, 1) == 'T'){
-    delta_h <- nn_tbl['init_5T/A', 1] + delta_h
-    delta_s <- nn_tbl['init_5T/A', 2] + delta_s
+  # Once per strand whose 5' end is T. The top strand's is the first base of
+  # the sequence; the bottom strand's is the last base of the complement.
+  # Charging only the first made Tm depend on which strand was handed over.
+  # Biopython tests seq.endswith("A") for the second term, which agrees only
+  # at a Watson-Crick terminus; reading the complement is exact.
+  t5 <- (substring(tmp_seq, 1, 1) == 'T') +
+        (substring(tmp_cseq, nchar(tmp_cseq), nchar(tmp_cseq)) == 'T')
+  if (t5 > 0L) {
+    delta_h <- nn_tbl['init_5T/A', 1] * t5 + delta_h
+    delta_s <- nn_tbl['init_5T/A', 2] * t5 + delta_s
   }
-  #if(substring(tmp_seq, 1, 1) == 'A'){
-  #  delta_h <- nn_tbl['init_5T/A', 1] + delta_h
-  #  delta_s <- nn_tbl['init_5T/A', 2] + delta_s
-  #}
   
   # -- Initiation parameters -------------------------------------------------
   first_base <- substr(tmp_seq, 1, 1)
@@ -886,7 +1044,19 @@ tm_nn <- function(gr_seq,
   gc_ends    <- sum(c(first_base, last_base) %in% c("G","C"))
   at_ends    <- 2L - gc_ends
   
-  if(gc_ends == 0){
+  # 'init_allA/T' and 'init_oneG/C' ask about the WHOLE duplex -- does it hold
+  # any G.C pair at all -- not about its two ends. Up to 1.1.1 this branch
+  # reused gc_ends, so a duplex closed by A.T at both ends took init_allA/T no
+  # matter how much G+C sat in the middle. The test is over base PAIRS, so a G
+  # or C appearing only in a mismatch does not count; for a perfect duplex this
+  # agrees with Biopython's gc_fraction(seq) == 0. See the matching comment in
+  # src/tm_nn_core.cpp; the two paths must stay identical.
+  top_bases   <- strsplit(tmp_seq,  "", fixed = TRUE)[[1L]]
+  bot_bases   <- strsplit(tmp_cseq, "", fixed = TRUE)[[1L]]
+  any_gc_pair <- any((top_bases == "G" & bot_bases == "C") |
+                     (top_bases == "C" & bot_bases == "G"))
+
+  if(!any_gc_pair){
     delta_h <- nn_tbl['init_allA/T', 1] + delta_h
     delta_s <- nn_tbl['init_allA/T', 2] + delta_s
   }else{
@@ -900,34 +1070,57 @@ tm_nn <- function(gr_seq,
   delta_s <- nn_tbl['init_G/C', 2] * gc_ends + delta_s
   
   # -- Vectorized table lookup -----------------------------------------------
-  # for nn table
-  matched_nn_fr <- keys_fr %in% rownames(nn_tbl)
-  #matched_nn_rf <- keys_rf %in% rownames(nn_tbl)
-  #which_nn_fr <- which(matched_nn_fr)
-  #which_nn_rf <- which(matched_nn_rf)
-  #n_int <- length(keys_fr)
-  #pos_nn_rf <- which_nn_rf[!which_nn_rf %in% (n_int - which_nn_fr + 1)]
+  # Each key is resolved in whichever orientation the table stores it: a key
+  # that misses is retried as its character reversal, which names the same
+  # physical stack. `resolve()` returns the spellings to index the table with,
+  # in order and with multiplicity, dropping the keys it holds neither way.
+  resolve <- function(keys, tbl) {
+    rn  <- rownames(tbl)
+    out <- rep(NA_character_, length(keys))
+    hit <- keys %in% rn
+    out[hit] <- keys[hit]
+    miss <- which(!hit)
+    if (length(miss)) {
+      rk  <- vapply(keys[miss], .rev_str, character(1L), USE.NAMES = FALSE)
+      ok  <- rk %in% rn
+      out[miss[ok]] <- rk[ok]
+    }
+    out
+  }
 
-  delta_h <- sum(nn_tbl[keys_fr[matched_nn_fr], 1]) + delta_h
-  delta_s <- sum(nn_tbl[keys_fr[matched_nn_fr], 2]) + delta_s
-  #delta_h <- sum(nn_tbl[keys_rf[pos_nn_rf], 1]) + delta_h
-  #delta_s <- sum(nn_tbl[keys_rf[pos_nn_rf], 2]) + delta_s
-  
-  # for imm table
-  matched_imm_fr <- keys_fr %in% rownames(imm_tbl)
-  #matched_imm_rf <- keys_rf %in% rownames(imm_tbl)
-  
-  #if(any(c(matched_imm_fr,matched_imm_rf))){
-  if(any(c(matched_imm_fr))){
-    #which_imm_fr <- which(matched_imm_fr)
-    #which_imm_rf <- which(matched_imm_rf)
-    #pos_imm_rf <- which_imm_rf[!which_imm_rf %in% (n_int - which_imm_fr + 1)]
-    
-    delta_h <- sum(imm_tbl[keys_fr[matched_imm_fr], 1]) + delta_h
-    delta_s <- sum(imm_tbl[keys_fr[matched_imm_fr], 2]) + delta_s
-    
-    #delta_h <- sum(imm_tbl[keys_rf[pos_imm_rf], 1]) + delta_h
-    #delta_s <- sum(imm_tbl[keys_rf[pos_imm_rf], 2]) + delta_s
+  # One stack, one parameter: a stack the nn table defines is not also taken
+  # from the mismatch table. The two overlap on the G.U wobble stacks of the
+  # RNA sets, whose spellings occur in the DNA mismatch table (Peyret 1999)
+  # meaning a DNA G.T mismatch; adding both gave such a stack two values. The
+  # nn table wins, being the one chosen for the molecule. No DNA set overlaps
+  # the mismatch table in either orientation, so DNA is unaffected.
+  spell_nn  <- resolve(keys_fr, nn_tbl)
+  spell_imm <- resolve(keys_fr, imm_tbl)
+  spell_imm[!is.na(spell_nn)] <- NA_character_
+
+  # A stack neither table defines is not scored as zero: of the 256 stacks
+  # over A/C/G/T, the 140 without parameters all carry two adjacent
+  # mismatches, which the two-state model does not describe. See the matching
+  # comment in src/tm_nn_core.cpp. `.tm_nn_chunk_r()` turns this into NA via
+  # its tryCatch, and reports it under n_no_thermo rather than n_no_stack --
+  # the compiled path distinguishes the two, this reference implementation
+  # does not, and only $Tm and $GC are compared between them.
+  gap <- is.na(spell_nn) & is.na(spell_imm)
+  if (any(gap))
+    stop("no thermodynamic parameters for the stack(s) ",
+         paste(utils::head(unique(keys_fr[gap]), 4L), collapse = ", "),
+         if (sum(gap) > 4L) ", ..." else "", call. = FALSE)
+
+  use_nn <- spell_nn[!is.na(spell_nn)]
+  if (length(use_nn)) {
+    delta_h <- sum(nn_tbl[use_nn, 1]) + delta_h
+    delta_s <- sum(nn_tbl[use_nn, 2]) + delta_s
+  }
+
+  use_imm <- spell_imm[!is.na(spell_imm)]
+  if (length(use_imm)) {
+    delta_h <- sum(imm_tbl[use_imm, 1]) + delta_h
+    delta_s <- sum(imm_tbl[use_imm, 2]) + delta_s
   }
   
   # -- Symmetry correction ---------------------------------------------------
@@ -1154,6 +1347,33 @@ complement_fast <- function(seq_str, rev = FALSE) {
   }
 }
 
+
+# -- One stack, two spellings -------------------------------------------------
+# A key "XY/WZ" denotes 5'-XY-3' paired with 3'-WZ-5'. Reading the same stack
+# from the other strand reverses the whole key: the bottom strand read 5'->3'
+# is "ZW", the top strand read 3'->5' is "YX". So "XY/WZ" and "ZW/YX" are the
+# same physical stack, and the published tables store only one of the two --
+# the IMM, TMM and DE tables each list every stack in one orientation only.
+# Without this retry, exactly one of the two stacks flanking any mismatch
+# failed to match and contributed zero.
+#
+# `rev_ok = FALSE` is for the two tables where the orientation is not a choice
+# of spelling but part of the meaning: the terminal-mismatch table, whose keys
+# carry the terminal pair second, and the Zuber end-effect table, which
+# already lists both orientations of most of its keys. Their callers build the
+# key in the table's own orientation instead of retrying.
+#
+# `.tbl_row()` returns the row of `tbl` for `key` in whichever orientation the
+# table happens to store it, or NULL.
+#' @keywords internal
+.tbl_row <- function(tbl, key, rev_ok = TRUE) {
+  if (length(key) != 1L || is.na(key) || !nzchar(key)) return(NULL)
+  if (key %in% rownames(tbl)) return(tbl[key, , drop = TRUE])
+  if (!rev_ok) return(NULL)
+  rk <- .rev_str(key)
+  if (rk %in% rownames(tbl)) return(tbl[rk, , drop = TRUE])
+  NULL
+}
 
 .right_key <- function(seq, cseq, len) {
   paste0(

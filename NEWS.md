@@ -1,3 +1,398 @@
+# TmCalculator 1.1.2
+
+- Audited built-in NN, mismatch and dangling-end citations. Corrected the
+  Allawi WC source, terminal-mismatch patent, six-paper internal-mismatch
+  attribution, and NNDB compilation date. Added a row-level source inventory
+  and documented unresolved source/model discrepancies; no parameter values
+  or numerical calculations were changed by this citation audit.
+
+## Which releases returned wrong melting temperatures, and who needs to act
+
+`tm_nn()` scored **duplexes that are not perfectly paired** incorrectly in
+every release from **1.0.5 (2026-06-04) through 1.1.1 (2026-09-21)** —
+1.0.5, 1.0.6, 1.0.7, 1.0.8, 1.0.9, 1.1.0 and 1.1.1. Versions up to and
+including **1.0.4 are correct**, and so is 1.1.2: on the duplex from issue
+#8 both give 59.973 °C, while the affected releases give 62.92 or 61.63
+depending on which strand was passed.
+
+**You are affected only if** you supplied `complement_seq` to
+`to_genomic_ranges()` or `tm_calculate()`, or a non-zero `shift` to
+`tm_nn()`. Those are the only ways a mismatch or a dangling end reaches the
+calculation.
+
+**You are not affected if** the complement was generated for you, which is
+what happens for every sequence, FASTA, `BSgenome` and `GRanges` input where
+you did not pass one yourself. Those duplexes are perfectly paired, every
+value is identical to 1.1.1, and nothing needs recomputing.
+
+To check an object you already have:
+
+```r
+mc <- GenomicRanges::mcols(gr)
+sum(as.character(mc$complement) !=
+      generate_complement(as.character(mc$sequence)))
+#  0 -> every duplex is perfectly paired; your results are unaffected
+#  >0 -> that many duplexes carry a mismatch; recompute them with 1.1.2
+```
+
+How far off the affected releases were, over 400 random 18-24-mers: up to
+about **4 °C** for one internal mismatch, about **16 °C** for a terminal
+mismatch, and about **6 °C** for two mismatches. The error is not a constant
+offset and does not average out: the same molecule gave two different answers
+depending on which strand was passed as `sequence`, differing by up to about
+3 °C.
+
+## Bug fix affecting every mismatched duplex
+
+This is a **regression, not an original defect**. Up to 1.0.4 the stacking
+loop was an explicit `if key / else if reversed key / else if other table /
+else stop()` chain: it retried the reversed spelling of a key, took one table
+or the other rather than both, and refused to guess at a stack no table
+defined.
+
+All three properties were lost in a single commit on 2026-05-26, which
+vectorised that per-base loop and, in the same change, replaced the retry with
+a completed parameter table — `.complete_nn_rc()`, which fills in the six
+reverse-orientation rows the published nearest-neighbor tables omit. **The
+completion was applied to the nearest-neighbor tables only.** The
+internal-mismatch, terminal-mismatch and dangling-end tables were left in one
+orientation with nothing left to look up the other, which is why perfectly
+paired duplexes came through untouched and every mismatch did not — and why
+the fault survived seven releases, since every existing test used perfectly
+paired duplexes.
+
+1.1.2 restores all three, and corrects the terminal-key orientation, which
+was wrong in both the old and the new form.
+
+* **A stack and its character reversal are the same stack, and the lookup did
+  not know it.** A key `"XY/WZ"` means 5'-XY-3' paired with 3'-WZ-5'; read
+  from the other strand the same stack is `"ZW/YX"`, the whole key reversed.
+  The published tables store each stack in one orientation only -- of the 87
+  keys in `DNA_IMM_Peyret_1999`, 85 have no reversed twin, and neither
+  `DNA_TMM_Bommarito_2000` (48) nor `DNA_DE_Bommarito_2000` (32) has any --
+  and the lookup was a single hash probe with no retry. A miss contributes
+  zero by design, so the omission was silent. Two consequences:
+
+  - **Internal mismatches lost one of their two flanking stacks.** Exactly one
+    of the two needs the reversed spelling, so no internal mismatch was ever
+    scored completely. The penalty came out about 45% too small on the
+    example from issue #8: a T·C mismatch in a 16-mer read as 62.93 °C
+    against a perfect 66.60 °C, where the full penalty gives 59.97 °C.
+
+  - **The terminal mismatch table was consulted in the wrong orientation,
+    which both missed the mismatches it should have caught and invented ones
+    it should not.** Its keys carry the terminal pair *second* (`"AA/TA"` is a
+    Watson-Crick pair then a mismatch), while the walk built the terminal key
+    with the terminal pair first. A genuine terminal mismatch therefore never
+    matched -- 0 times across 400 random duplexes carrying one -- and was
+    scored with the internal-mismatch parameters instead. Worse, a duplex
+    whose terminal pair *is* Watson-Crick but whose next pair is not produces
+    a terminal-first key of exactly the shape the table stores, so it matched
+    spuriously and collected a terminal-mismatch penalty it had not earned.
+    The terminal keys are now built in the orientation the table uses (the
+    reversal of the first stack at the left-hand end, the last stack as-is at
+    the right-hand end), and that table is excluded from the reversed retry,
+    because for it the orientation carries meaning rather than being two
+    spellings of one thing.
+
+  Because the two strands were walked asymmetrically, the same molecule gave
+  two different answers depending on which strand was passed as `sequence`.
+  Over 400 random 18-24-mers read both ways the two answers differed by up to
+  about 3 °C for an internal mismatch and about 4 °C for a terminal one;
+  perfect duplexes agreed exactly. That asymmetry is now the regression test
+  (`test_regressions_1_1_2.R`): it needs no reference implementation, and it
+  would also have caught the table transposition fixed in 1.1.0.
+
+  Reported by \@haraldn in
+  [#8](https://github.com/JunhuiLi1017/TmCalculator/issues/8).
+
+* **Dangling ends and the Zuber 2022 end-effect table were already correct**
+  and are unchanged. `.right_key()` already rewrites the right-hand terminal
+  stack into the orientation those tables use. The end-effect table is
+  excluded from the reversed retry on purpose: it lists both orientations of
+  most of its keys, so a retry there could return a different stack's value.
+
+* **A stack is now taken from one table, not two.** `nn_table` and
+  `imm_table` were consulted independently and both added, so a stack present
+  in both received two values. That happens for the G·U wobble stacks of
+  `RNA_NN_Chen_2012` and `RNA_NN_Zuber_2022`, whose spellings also occur in
+  the default `DNA_IMM_Peyret_1999`, where they mean a DNA G·T mismatch: such
+  a stack was charged an RNA wobble parameter plus an unrelated DNA mismatch
+  parameter. The nearest-neighbor set now wins, being the one chosen for the
+  molecule. No DNA parameter set overlaps the mismatch table in either
+  orientation, so **no DNA result moves**; RNA duplexes carrying wobbles move
+  by up to about 2.4 °C. (The pre-vectorisation loop already took one table
+  or the other; the additive form arrived with the vectorisation.)
+
+* **A stack no parameter set defines returns NA with a warning, instead of
+  being scored as contributing nothing.** Of the 256 dinucleotide stacks over
+  A/C/G/T, 116 have parameters. The other 140 all carry two adjacent
+  mismatches, which the two-state nearest-neighbor model does not describe:
+  the published sets measure a mismatch flanked by Watson-Crick pairs. Only
+  the three tandem G·T stacks — `GG/TT`, `GT/TG` and `TG/GT`, from Allawi and
+  SantaLucia (1997) — have measured values, which is the same coverage
+  MELTING 5 reports for DNA, and those are computed as before. Treating the
+  rest as zero overstated stability with nothing to show for it; MELTING quits
+  with a warning and Biopython raises, and up to 1.0.4 this package raised too.
+  Reporting per sequence rather than per call keeps a genome-scale run going.
+
+  Nothing that was already computable changes: a single mismatch, a single
+  inosine paired with C, a dangling end and every perfectly paired duplex are
+  all fully covered. This restores the explicit report promised in
+  [#1](https://github.com/JunhuiLi1017/TmCalculator/issues/1), and closes
+  `ROADMAP.md` item 11.
+
+* **The 5'-T initiation penalty is charged per strand rather than per
+  sequence.** `init_5T/A` is due once for each strand whose 5' end is T: the
+  first base of the sequence, and the last base of the complement. Only the
+  first was charged, which by itself made Tm depend on which strand was
+  passed. The term is zero in all 31 shipped parameter sets, so **no shipped
+  result moves**; a user-supplied table with a non-zero value used to break
+  the strand symmetry and now does not. (This one is not a regression: the
+  pre-vectorisation code had its own version of the fault, testing the first
+  base for `A` where it meant the last.)
+
+## Bug fix affecting every RNA/DNA hybrid Tm
+
+* **Four of the five hybrid parameter sets were stored with the DNA strand on
+  top.** `RNA_DNA_NN_Sugimoto_1995`, `RNA_DNA_NN_Weber_2019_FT`, `..._VH` and
+  `..._LS` had every non-palindromic key reversed. Unlike DNA/DNA and RNA/RNA
+  parameters, hybrid parameters are **not** invariant under reversing a key,
+  because reversing swaps which strand carries the ribose: `"AA/TT"` is
+  rAA·dTT and `"TT/AA"` is rUU·dAA, and those differ by about 0.8 kcal/mol in
+  ΔG°37. Every hybrid Tm from these four sets was therefore the Tm of the
+  opposite hybrid. `RNA_DNA_NN_Banerjee_2020` was correct and is unchanged.
+
+  Both sources index their tables the other way round from this package.
+  Sugimoto et al. (1995) Biochemistry 34:11211 put the RNA strand on top, as
+  we do; the table had simply been entered reversed. Basílio Barbosa et al.
+  (2019) Biophys Chem 251:106189 §2.2 say they "always use the notation
+  starting with the deoxy base", so their `dXrY-dWrZ` is our `"ZY/WX"`, and
+  the three Weber sets had been imported in the paper's orientation.
+
+  All four sets now reproduce Table 1 of Basílio Barbosa et al. (2019) exactly,
+  16 stacks each, including its `P-SG95` column which is the Sugimoto set. The
+  Sugimoto fix also reproduces the worked example in its own source,
+  ΔG°37(rAGGUC/dTCCAG) = 3.1 − 1.8 − 2.9 − 1.1 − 1.5 = −4.2 kcal/mol.
+  Initiation rows were never affected.
+
+  Affected releases are 1.0.9 to 1.1.1 for the Weber sets, which were added in
+  1.0.9, and every release to date for `RNA_DNA_NN_Sugimoto_1995`.
+
+* **Hybrid duplexes must be given the RNA strand as the sequence.** This was
+  always the intent and is now stated in `?tm_nn` under `nn_table`: supply the
+  RNA strand, 5' to 3', spelled with T in place of U; the complement is then
+  the DNA strand, 3' to 5'. Handing over the DNA strand does not raise an
+  error, it silently answers for the other hybrid.
+
+* **The Sugimoto (1995) DOI was wrong** in `?tm_nn`, `?thermodynamic_nn_params`
+  and the per-table reference strings. It pointed at
+  `10.1016/S0048-9697(98)00088-6`, a Science of the Total Environment paper.
+  Corrected to `10.1021/bi00035a029`.
+
+## Bug fix affecting `DNA_NN_Breslauer_1986`
+
+* **`init_allA/T` was chosen from the two terminal bases instead of from the
+  whole duplex.** That row means "this duplex contains no G·C pair at all",
+  but the branch reused the `gc_ends` count, so any duplex closed by A·T at
+  both ends took it no matter how much G+C sat in the middle. `ATGCGCGCAT`
+  paired with its complement is 60 % G+C and was charged as an all-A/T duplex,
+  an error of 4.07 °C. No terminal mismatch is needed to trigger it.
+
+  `DNA_NN_Breslauer_1986` is the only shipped set that gives `init_allA/T` and
+  `init_oneG/C` different values (ΔS −20.1 vs −16.8); in the other 35 the two
+  branches return the same numbers, which is why nothing else could expose it.
+  The test is now over base *pairs*, so a G or C appearing only in a mismatch
+  does not make the duplex a G/C-containing one, and for a perfect duplex it
+  agrees with Biopython.
+
+## What the initiation terms are charged on
+
+Not a change in 1.1.2, but it is now stated in `?tm_nn` rather than left
+implicit, because it is the one place where this package deliberately parts
+company with Biopython.
+
+A dangling end or terminal mismatch is covered by its own parameter and the
+position is then consumed; the initiation terms are charged on what remains.
+Biopython consumes the position for the stacking sum but still indexes all
+four initiation terms on the sequence as supplied. The consequence is that its
+answer depends on which strand you hand over:
+
+```r
+# the same duplex, written from either strand, with one terminal A-C mismatch
+tm_calculate("AGCGCGCGCA", complement_seq = "CCGCGCGCGT",
+             nn_table = "DNA_NN_SantaLucia_2004",
+             dnac_high = 250, dnac_low = 0, salt_method = "none")   # 63.6925
+tm_calculate("TGCGCGCGCC", complement_seq = "ACGCGCGCGA",
+             nn_table = "DNA_NN_SantaLucia_2004",
+             dnac_high = 250, dnac_low = 0, salt_method = "none")   # 63.6925
+```
+
+Biopython returns 64.2325 and 63.6925 for those two. Every other term is
+identical — the terminal-mismatch parameter is `CC/GA` either way and the
+eight stacks sum to the same value. The whole difference is one `init_A/T`
+traded for one `init_G/C`, 2.2 kcal/mol and 6.9 e.u.
+
+The sharpest form of the argument is the dangling-end case, which is
+[@haraldn](https://github.com/haraldn)'s (#8). At a terminal mismatch two
+bases still face each other, so which pair closes the duplex is at least
+arguable. At a dangling end the outermost residue has no partner at all, and a
+residue that is in no base pair cannot carry the penalty for a terminal base
+pair under any reading of SantaLucia & Hicks (2004). `"GCATGCATGA"` against
+`"CGTACGTAC"` takes the `.C/AG` dangling-end term, trims, and Biopython then
+charges a full `init_A/T` on the unpaired A purely because it is `seq[-1]`;
+this package returns 44.2801 where Biopython returns 44.2344.
+
+How large the divergence is depends on where the duplex melts. `init_A/T` is
+(2.2 kcal/mol, 6.9 e.u.), so its ratio is 318.8 K: its effect on Tm passes
+through zero near 45.7 °C and changes sign either side. That is why the same
+disagreement is worth 0.05 °C on the duplex above, which melts at 44.3 °C, and
+0.37 °C on a 16-mer melting further away.
+
+`DNA_NN_Breslauer_1986` is not bound by that cancellation, because the row
+that diverges for it is `init_allA/T` rather than `init_A/T` — the two
+conventions can disagree about whether the duplex contains a G·C pair at all.
+That needs the single G or C to be the mismatched terminal base itself, so
+that trimming removes it: for `"GATATATATATATATA"` against
+`"ATATATATATATATAT"` the gap is 3.0 °C, and it widens to 4.9 °C at 8 nt,
+where the duplex no longer melts above 0 °C. This is a different thing from
+the `gc_ends` defect described in the previous section, which was our own and
+needed no mismatch at all.
+
+## Smaller things
+
+* **`salt_method = "SantaLucia1998-2"` was unreachable.** `salt_correct()`
+  implements it, both melting-temperature paths in `tm_nn()` apply it to the
+  entropy, and `?tm_gc` says it is available in `tm_nn()` — but it was missing
+  from the `salt_method` default vector of `tm_nn()` and `tm_calculate()`, so
+  `match.arg()` rejected the name before any of that could run. It is now
+  offered by both, and refused for `method = "tm_gc"` with the reason, next to
+  the two Owczarzy methods that were already refused there. A test now asserts
+  that the set of methods `salt_correct()` implements and the set `tm_nn()`
+  offers are the same set, so the two cannot drift apart again.
+
+* **New: a Biopython parity harness**, `tools/biopython_parity/`. It crosses
+  every parameter the two implementations share — 8 shared parameter sets, all
+  8 salt methods, 6 ionic conditions, 3 strand-concentration regimes,
+  self-complementarity, and 13 duplex shapes — and requires exact agreement on
+  perfect duplexes and on duplexes whose only defect is an internal mismatch.
+  Terminal mismatches and dangling ends are expected to differ, for the
+  documented initiation-convention reason, and are reported without failing.
+  See its README.
+
+* **`tm_nn()`, `tm_gc()` and `tm_wallace()` now take a character vector.**
+  They documented and accepted only the `GRanges` that
+  `to_genomic_ranges()` returns; handed the sequence a user naturally reaches
+  for, they got as far as `GenomicRanges::mcols()` and failed on S4 dispatch
+  with a message that named neither the argument nor the fix. Anything
+  `to_genomic_ranges()` accepts — sequences, a FASTA path, coordinate strings
+  — is now converted first, and anything else is refused by name.
+
+  ```r
+  tm_nn("CGTAGCATCCGATCGA", nn_table = "DNA_NN_Allawi_1998")   # now works
+  ```
+
+  Pairing a sequence with a complement of your own still needs the explicit
+  form, since there is nowhere in `tm_nn(seq)` to put one:
+  `tm_nn(to_genomic_ranges(seq, complement_seq = cmp))`.
+
+## Strand direction, which is what invites the mistake
+
+* **`generate_complement()`'s `reverse` argument had its two directions
+  written the wrong way round.** It described `reverse = FALSE` as giving a
+  sequence "in the same direction (5' to 3')" when that is the plain
+  complement, which pairs base for base and therefore reads 3' to 5'; and
+  `reverse = TRUE`, the reverse complement, as "3' to 5'" when that is the
+  strand written 5' to 3'. Both labels are corrected.
+
+* **`to_genomic_ranges(complement_seq =)` now states the direction, and warns
+  when a reverse complement is supplied instead.** The argument wants the
+  plain complement, aligned base for base with `input_seq`. The reverse
+  complement is what `Biostrings::reverseComplement()` and a supplier's order
+  form give you, and passing it pairs every position against the wrong base:
+  the duplex is read as almost entirely mismatched and the Tm comes back as a
+  large negative number rather than an error. The check is cheap and
+  unambiguous -- if reversing the supplied complement makes it pair better, it
+  was supplied reversed -- and it only reports, so a genuinely mismatched
+  duplex still goes through untouched.
+
+## Bug fix affecting Owczarzy2008 with magnesium
+
+* **`salt_method = "Owczarzy2008"` returned `NA` for both `Tm` and `GC`
+  whenever magnesium dominated the monovalent cations.** The method is
+  piecewise in `R = sqrt([Mg2+]free) / [Mon]` and the third of its
+  three regimes, `R >= 6`, was not implemented: the scalar
+  `salt_correct()` reached the end of its `if`/`else` without assigning a
+  result, and the vectorized path returned `NA` to reproduce that. Ordinary
+  PCR-like conditions land there, so a whole class of calls silently produced
+  nothing:
+
+  ```r
+  tm_nn(to_genomic_ranges("GCATCGTAGGCTAGCTTGCA"),
+        salt_method = "Owczarzy2008", Na = 1, Mg = 5)
+  #  before: Tm NA, GC NA      now: Tm 63.16, GC 55
+  ```
+
+  The missing branch is the published expression with its constants
+  unmodified (a = 3.92, b = -0.911, c = 6.26, d = 1.42, e = -48.2, f = 52.5,
+  g = 8.31); only the competing regime reparameterises them on `[Mon]`.
+
+* **Owczarzy2008 with magnesium but no monovalent cation applied no
+  correction at all.** `Na = 0, K = 0, Tris = 0, Mg = 5` fell into the guard
+  that returns zero when the monovalent concentration is zero, which is right
+  for the six methods that take the logarithm of it and wrong for this one:
+  in the divalent-dominated regime `[Mon]` drops out of the expression
+  and the correction is defined. This was worse than the `NA` above, because
+  nothing marked the result as untrustworthy. Such calls now return the
+  divalent form and the value changes.
+
+## Breaking change in `tm_gc()`
+
+* **`salt_method = "Owczarzy2004"` and `"Owczarzy2008"` are no longer accepted
+  by `tm_gc()`, and `tm_calculate(method = "tm_gc", ...)` rejects them too.**
+  They are corrections to the reciprocal of the melting temperature in
+  kelvin, referenced to the same duplex in 1 M Na+, and they carry a
+  `1/(2(N-1))` duplex-length term of their own. The GC-content formulas are
+  on neither footing and already have a length term, so the two cannot be
+  combined even with the reciprocal arithmetic done correctly. Both remain
+  available in `tm_nn()`, which is where they belong.
+
+  They were reachable only through `userset`, where `tm_gc()` added them to
+  the Tm additively rather than reciprocally and so applied a shift of order
+  1e-5 degrees instead of the intended correction. Any such call was
+  therefore already producing an essentially uncorrected Tm.
+
+* **`tm_gc(salt_method =)` now defaults to `NULL` and says when it is
+  ignored.** With a built-in `variant` the salt term is part of the published
+  formula, and naming a different one was silently overridden. It is still
+  overridden, because the formula has to be the one it is labelled as, but
+  the call now warns. `NULL` selects the variant's own correction, or
+  `"Schildkraut2010"` with `userset`, which is what the function has always
+  applied in that case. `NA` and `"none"` drop the correction altogether on
+  either path: that is not a substitution, so it is honoured rather than
+  warned about, and `$options` reports the result as uncorrected. The
+  documentation had promised `NA` since 1.1.0 without the code supporting it.
+
+* **`tm_calculate()` reports the salt correction that was applied.** On the
+  profiling route `$options$salt_method` echoed the requested value, so a
+  `method = "tm_gc"` run could say `"Schildkraut2010"` while `vonAhsen2001`'s
+  own `"SantaLucia1998-1"` term had been used, or name a correction for
+  `Chester1993`, which has none. The direct route was already correct.
+
+## Behaviour changes
+
+* **`GC` no longer follows `Tm` into `NA`.** A sequence the thermodynamic
+  model cannot evaluate gets `NA` for `Tm` alone; its base composition is a
+  property of the sequence, not of the model, and is still reported. `GC` is
+  `NA` only where the sequence itself has no countable base, which is what
+  `gc_content()` returns for the same input.
+
+* **`tm_nn()` now warns when it returns `NA`.** It used to do so silently, so
+  a caller who did not test for `NA` carried it into a mean or a plot without
+  ever being told. The two causes are reported separately, because they call
+  for different fixes: a sequence the model cannot evaluate is an input
+  problem, an undefined salt correction is a condition problem.
+
 # TmCalculator 1.1.1
 
 ## New features

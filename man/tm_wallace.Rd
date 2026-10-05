@@ -8,8 +8,12 @@
 tm_wallace(gr_seq, ambiguous = FALSE)
 }
 \arguments{
-\item{gr_seq}{Pre-processed sequence(s) in 5' to 3' direction. This should be the output from
-to_genomic_ranges() function.}
+\item{gr_seq}{Sequence(s) in 5' to 3' direction, as the \code{GRanges} that
+\code{\link{to_genomic_ranges}} returns. A character vector of
+sequences, a path to a FASTA file, or genomic coordinate strings are also
+accepted and converted for you. To pair a sequence with a complement of
+your own, build the object explicitly:
+\code{to_genomic_ranges(seq, complement_seq = cmp)}.}
 
 \item{ambiguous}{Ambiguous bases are taken into account to compute the G and C content when ambiguous is TRUE.}
 }
@@ -42,7 +46,7 @@ input_seq = c('acgtTGCAATGCCGTAWSDBSY','acgtTGCCCCGGCCGCGCCGTAWSDBSY') #for wall
 gr_seq <- to_genomic_ranges(input_seq)
 out <- tm_wallace(gr_seq, ambiguous = TRUE)
 out
-out$Options
+out$options
 
 }
 \references{

@@ -16,7 +16,7 @@ test_that("reverse-complement completion copies from the reversed key", {
   # never completed.
   tables <- c(
     "DNA_NN_SantaLucia_2004", "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996",
-    "DNA_NN_Allawi_1998", "RNA_NN_Freier_1986", "RNA_NN_Xia_1998",
+    "DNA_NN_Allawi_1997", "RNA_NN_Freier_1986", "RNA_NN_Xia_1998",
     "RNA_NN_Chen_2012", "RNA_NN_Zuber_2022",
     "DNA_NN_Weber_2015", "DNA_NN_Weber_OW04_69", "DNA_NN_Weber_OW04_119",
     "DNA_NN_Weber_OW04_220", "DNA_NN_Weber_OW04_621", "DNA_NN_Weber_OW04_1020",

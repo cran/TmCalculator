@@ -16,6 +16,14 @@ knitr::opts_chunk$set(
   fig.height = 6
 )
 
+# karyoploteR is in Suggests and is needed only for the linear layout of
+# plot_genome_track(). It is not available as a binary on every platform CRAN
+# checks, and plot_genome_track() raises an error rather than returning
+# silently when it is missing, which would fail the vignette build. The linear
+# chunk below is therefore conditional on it; the circular ones are not,
+# since they do not use it.
+has_kp <- requireNamespace("karyoploteR", quietly = TRUE)
+
 ## ----packages-----------------------------------------------------------------
 library(TmCalculator)
 library(GenomicRanges)
@@ -247,7 +255,10 @@ plot_genome_track(
   label       = label
 )
 
-## ----sensitivity-zoom, fig.width=10, fig.height=7.5, fig.cap="The 0.1-0.3 Mb region, within the interval shown in the genome-wide figure of the main case study, with Tm computed at 50, 100, 200 and 500 bp (dark to light). The 50 bp profile resolves single-window fluctuations that the 500 bp profile averages away, but all four trace the same underlying landscape. Yellow bands mark MutL-AR peaks."----
+## ----echo=FALSE, results="asis"-----------------------------------------------
+if (!has_kp) cat("> The linear view below is omitted because the suggested\n> package **karyoploteR** is not installed. Install it with\n> `BiocManager::install(\"karyoploteR\")` to reproduce it.\n\n")
+
+## ----sensitivity-zoom, eval = has_kp, fig.width=10, fig.height=7.5, fig.cap="The 0.1-0.3 Mb region, within the interval shown in the genome-wide figure of the main case study, with Tm computed at 50, 100, 200 and 500 bp (dark to light). The 50 bp profile resolves single-window fluctuations that the 500 bp profile averages away, but all four trace the same underlying landscape. Yellow bands mark MutL-AR peaks."----
 ## Only the four Tm profiles are drawn. Ten line tracks in one linear panel
 ## leave each too little vertical space for its own axis labels, which then
 ## collide, and everything except Tm is answering a different question: the

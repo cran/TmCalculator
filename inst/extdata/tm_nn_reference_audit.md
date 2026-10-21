@@ -30,14 +30,14 @@ RNA/DNA 的 16 个堆叠项彼此独立，不能套用交换 RNA/DNA 链的对�
 |---|---:|---|---|
 | `DNA_NN_Breslauer_1986` | 23 | [10.1073/pnas.83.11.3746](https://doi.org/10.1073/pnas.83.11.3746); Table 2; p3749 initiation discussion | primary |
 | `DNA_NN_Sugimoto_1996` | 23 | [10.1093/nar/24.22.4501](https://doi.org/10.1093/nar/24.22.4501); VarGibbs P-SG96.par | secondary |
-| `DNA_NN_Allawi_1998` | 23 | [10.1021/bi962590c](https://doi.org/10.1021/bi962590c), [10.1073/pnas.95.4.1460](https://doi.org/10.1073/pnas.95.4.1460); 1997 Table 1; 1998 Table 2 | primary |
+| `DNA_NN_Allawi_1997` | 23 | [10.1021/bi962590c](https://doi.org/10.1021/bi962590c), [10.1073/pnas.95.4.1460](https://doi.org/10.1073/pnas.95.4.1460); 1997 Table 1; 1998 Table 2 | primary |
 | `DNA_NN_SantaLucia_2004` | 23 | [10.1146/annurev.biophys.32.110601.141800](https://doi.org/10.1146/annurev.biophys.32.110601.141800); Table 1 | primary |
 | `RNA_NN_Freier_1986` | 23 | [10.1073/pnas.83.24.9373](https://doi.org/10.1073/pnas.83.24.9373); Table 2 | primary |
 | `RNA_NN_Xia_1998` | 23 | [10.1021/bi9809425](https://doi.org/10.1021/bi9809425), [10.1021/bi3002709](https://doi.org/10.1021/bi3002709); Xia parameters reprinted in Chen 2012 Table 3, outside parentheses | primary_reprint |
 | `RNA_NN_Chen_2012` | 34 | [10.1021/bi3002709](https://doi.org/10.1021/bi3002709); Table 3 and footnote c | primary |
 | `RNA_DNA_NN_Sugimoto_1995` | 23 | [10.1021/bi00035a029](https://doi.org/10.1021/bi00035a029); VarGibbs P-SG95.par | secondary |
 | `DNA_IMM_Peyret_1999` | 87 | [10.1021/bi962590c](https://doi.org/10.1021/bi962590c), [10.1093/nar/26.11.2694](https://doi.org/10.1093/nar/26.11.2694), [10.1021/bi9803729](https://doi.org/10.1021/bi9803729), [10.1021/bi9724873](https://doi.org/10.1021/bi9724873), [10.1021/bi9825091](https://doi.org/10.1021/bi9825091), [10.1093/nar/gki918](https://doi.org/10.1093/nar/gki918); Six-source composite; see row-level inventory | mixed |
-| `DNA_TMM_Bommarito_2000` | 48 | [WO2001094611A2](https://patents.google.com/patent/WO2001094611A2/en); Tables 2-3, printed pp52-54 | primary |
+| `DNA_TMM_SantaLucia_2001` | 48 | [WO2001094611A2](https://patents.google.com/patent/WO2001094611A2/en); Tables 2-3, printed pp52-54 | primary |
 | `DNA_DE_Bommarito_2000` | 32 | [10.1093/nar/28.9.1929](https://doi.org/10.1093/nar/28.9.1929); Table 2 | primary |
 | `RNA_DE_Turner_2010` | 48 | [10.1093/nar/gkp892](https://doi.org/10.1093/nar/gkp892); NNDB Turner 2004 dangle_dh.txt and dangle_dg.txt | primary_database |
 | `DNA_NN_Weber_OW04_69` | 23 | [10.1093/bioinformatics/btu751](https://doi.org/10.1093/bioinformatics/btu751); Author release VarGibbs 5.0 data/AOP-OW04-69.par | author_data |
@@ -94,7 +94,7 @@ RNA/DNA 的 16 个堆叠项彼此独立，不能套用交换 RNA/DNA 链的对�
 | `GG/CC` | -8.00 | -19.90 | 一致 |
 
 旧 DOI `10.1093/nar/26.11.2694` 是 **C·T 内部错配**来源，现从此 WC 表引用中移除，
-保留在 IMM 引文中。旧表名 `DNA_NN_Allawi_1998` 为兼容保留，说明文字标明真实年份。
+保留在 IMM 引文中。旧表名 `DNA_NN_Allawi_1997` 为兼容保留，说明文字标明真实年份。
 与2004表相比是 **9/10 个独立堆叠项相同**；`AA/TT` 与 `TT/AA` 是同一独立项的
 对称写法，不能算作两个独立差别。起始项还涉及全局 init 与末端罚项的重新分配。
 

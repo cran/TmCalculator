@@ -9,7 +9,7 @@ tm_nn(
   ambiguous = FALSE,
   shift = 0,
   nn_table = c("DNA_NN_SantaLucia_2004", "DNA_NN_Ghosh_2020_PEG200",
-    "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996", "DNA_NN_Allawi_1998",
+    "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996", "DNA_NN_Allawi_1997",
     "RNA_NN_Freier_1986", "RNA_NN_Xia_1998", "RNA_NN_Chen_2012", "RNA_NN_Zuber_2022",
     "RNA_NN_Ghosh_2023_PEG200", "RNA_DNA_NN_Sugimoto_1995", "DNA_NN_Weber_2015",
     "DNA_NN_Weber_OW04_69", "DNA_NN_Weber_OW04_119", "DNA_NN_Weber_OW04_220",
@@ -20,7 +20,7 @@ tm_nn(
     "RNA_NN_Weber_FIF_221", "RNA_NN_Weber_FIF_621", "RNA_NN_Weber_FIF_1021",
     "RNA_DNA_NN_Weber_2019_FT", "RNA_DNA_NN_Weber_2019_VH", "RNA_DNA_NN_Weber_2019_LS",
     "RNA_DNA_NN_Banerjee_2020"),
-  tmm_table = "DNA_TMM_Bommarito_2000",
+  tmm_table = "DNA_TMM_SantaLucia_2001",
   imm_table = "DNA_IMM_Peyret_1999",
   de_table = c("DNA_DE_Bommarito_2000", "RNA_DE_Turner_2010"),
   dnac_high = 25,
@@ -81,7 +81,7 @@ your own, build the object explicitly:
   DNA/DNA hybridizations, reference salt:
   - "DNA_NN_Breslauer_1986": Original DNA/DNA parameters
   - "DNA_NN_Sugimoto_1996": Improved DNA/DNA parameters
-  - "DNA_NN_Allawi_1998": Watson-Crick parameters from Allawi & SantaLucia
+  - "DNA_NN_Allawi_1997": Watson-Crick parameters from Allawi & SantaLucia
     (1997), Table 1; the historical identifier is retained for compatibility
   - "DNA_NN_SantaLucia_2004": Unified DNA/DNA parameters (default)
 
@@ -163,7 +163,7 @@ your own, build the object explicitly:
   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
   companion penultimate-pair end-effect table.}
 
-\item{tmm_table}{Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_Bommarito_2000"
+\item{tmm_table}{Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_SantaLucia_2001"
 These 48 parameters come from SantaLucia & Peyret (2001), patent
 WO2001094611A2, Tables 2-3. The historical identifier is retained;
 Bommarito (2000) is the source of DNA dangling ends, not this table.}
@@ -262,7 +262,7 @@ DNA_NN_Breslauer_1986: Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>
  
  DNA_NN_Sugimoto_1996: Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>
  
- DNA_NN_Allawi_1998: Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>
+ DNA_NN_Allawi_1997: Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>
  
  DNA_NN_SantaLucia_2004: SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>
  
@@ -305,7 +305,7 @@ DNA_NN_Breslauer_1986: Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>
 
  DNA_NN_Ghosh_2020_PEG200 (100 mM, 40 wt% PEG200): Ghosh S (2020) <doi:10.1073/pnas.1920886117>
 
- DNA_TMM_Bommarito_2000: SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)
+ DNA_TMM_SantaLucia_2001: SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)
  
  DNA_IMM_Peyret_1999: Allawi H T & SantaLucia J Jr (1997, G.T) <doi:10.1021/bi962590c>; (1998, G.A) <doi:10.1021/bi9724873>; (1998, A.C) <doi:10.1021/bi9803729>; (1998, C.T) <doi:10.1093/nar/26.11.2694>; Peyret N et al. (1999, A.A/C.C/G.G/T.T) <doi:10.1021/bi9825091>; Watkins N E Jr & SantaLucia J Jr (2005, inosine) <doi:10.1093/nar/gki918>
  

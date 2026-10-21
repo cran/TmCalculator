@@ -73,7 +73,7 @@
 #'   DNA/DNA hybridizations, reference salt:
 #'   - "DNA_NN_Breslauer_1986": Original DNA/DNA parameters
 #'   - "DNA_NN_Sugimoto_1996": Improved DNA/DNA parameters
-#'   - "DNA_NN_Allawi_1998": Watson-Crick parameters from Allawi & SantaLucia
+#'   - "DNA_NN_Allawi_1997": Watson-Crick parameters from Allawi & SantaLucia
 #'     (1997), Table 1; the historical identifier is retained for compatibility
 #'   - "DNA_NN_SantaLucia_2004": Unified DNA/DNA parameters (default)
 #'
@@ -154,7 +154,7 @@
 #'   this way; without it the table is treated as a reference-condition set and
 #'   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
 #'   companion penultimate-pair end-effect table.
-#' @param tmm_table Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_Bommarito_2000"
+#' @param tmm_table Thermodynamic parameters for terminal mismatches. Default: "DNA_TMM_SantaLucia_2001"
 #'   These 48 parameters come from SantaLucia & Peyret (2001), patent
 #'   WO2001094611A2, Tables 2-3. The historical identifier is retained;
 #'   Bommarito (2000) is the source of DNA dangling ends, not this table.
@@ -273,7 +273,7 @@
 #'  
 #'  DNA_NN_Sugimoto_1996: Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>
 #'  
-#'  DNA_NN_Allawi_1998: Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>
+#'  DNA_NN_Allawi_1997: Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>
 #'  
 #'  DNA_NN_SantaLucia_2004: SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>
 #'  
@@ -316,7 +316,7 @@
 #'
 #'  DNA_NN_Ghosh_2020_PEG200 (100 mM, 40 wt% PEG200): Ghosh S (2020) <doi:10.1073/pnas.1920886117>
 #'
-#'  DNA_TMM_Bommarito_2000: SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)
+#'  DNA_TMM_SantaLucia_2001: SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)
 #'  
 #'  DNA_IMM_Peyret_1999: Allawi H T & SantaLucia J Jr (1997, G.T) <doi:10.1021/bi962590c>; (1998, G.A) <doi:10.1021/bi9724873>; (1998, A.C) <doi:10.1021/bi9803729>; (1998, C.T) <doi:10.1093/nar/26.11.2694>; Peyret N et al. (1999, A.A/C.C/G.G/T.T) <doi:10.1021/bi9825091>; Watkins N E Jr & SantaLucia J Jr (2005, inosine) <doi:10.1093/nar/gki918>
 #'  
@@ -453,7 +453,7 @@ tm_nn <- function(gr_seq,
                                      "DNA_NN_Ghosh_2020_PEG200",
                                      "DNA_NN_Breslauer_1986",
                                      "DNA_NN_Sugimoto_1996",
-                                     "DNA_NN_Allawi_1998",
+                                     "DNA_NN_Allawi_1997",
                                      "RNA_NN_Freier_1986",
                                      "RNA_NN_Xia_1998",
                                      "RNA_NN_Chen_2012",
@@ -480,7 +480,7 @@ tm_nn <- function(gr_seq,
                                      "RNA_DNA_NN_Weber_2019_VH",
                                      "RNA_DNA_NN_Weber_2019_LS",
                                      "RNA_DNA_NN_Banerjee_2020"),
-                  tmm_table      = "DNA_TMM_Bommarito_2000",
+                  tmm_table      = "DNA_TMM_SantaLucia_2001",
                   imm_table      = "DNA_IMM_Peyret_1999",
                   de_table       = c("DNA_DE_Bommarito_2000",
                                      "RNA_DE_Turner_2010"),
@@ -646,13 +646,13 @@ tm_nn <- function(gr_seq,
   
   nn_table_list <- list("DNA_NN_Breslauer_1986" = "Breslauer K J (1986) <doi:10.1073/pnas.83.11.3746>",
                         "DNA_NN_Sugimoto_1996" = "Sugimoto N (1996) <doi:10.1093/nar/24.22.4501>",
-                        "DNA_NN_Allawi_1998" = "Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>",
+                        "DNA_NN_Allawi_1997" = "Allawi H T & SantaLucia J Jr (1997), Table 1 <doi:10.1021/bi962590c>; also SantaLucia (1998), Table 2 <doi:10.1073/pnas.95.4.1460>",
                         "DNA_NN_SantaLucia_2004" = "SantaLucia J (2004) <doi:10.1146/annurev.biophys.32.110601.141800>",
                         "RNA_NN_Freier_1986" = "Freier S (1986) <doi:10.1073/pnas.83.24.9373>",
                         "RNA_NN_Xia_1998" = "Xia T (1998) <doi:10.1021/bi9809425>",
                         "RNA_NN_Chen_2012" = "Chen JL (2012) <doi:10.1021/bi3002709>",
                         "RNA_DNA_NN_Sugimoto_1995" = "Sugimoto N (1995)<doi:10.1021/bi00035a029>",
-                        "DNA_TMM_Bommarito_2000" = "SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)",
+                        "DNA_TMM_SantaLucia_2001" = "SantaLucia J Jr & Peyret N (2001), WO2001094611A2, Tables 2-3 (https://patents.google.com/patent/WO2001094611A2/en)",
                         "DNA_IMM_Peyret_1999" = "Allawi H T & SantaLucia J Jr (1997, G.T) <doi:10.1021/bi962590c>; (1998, G.A) <doi:10.1021/bi9724873>; (1998, A.C) <doi:10.1021/bi9803729>; (1998, C.T) <doi:10.1093/nar/26.11.2694>; Peyret N et al. (1999, A.A/C.C/G.G/T.T) <doi:10.1021/bi9825091>; Watkins N E Jr & SantaLucia J Jr (2005, inosine) <doi:10.1093/nar/gki918>",
                         "DNA_DE_Bommarito_2000" = "Bommarito S (2000) <doi:10.1093/nar/28.9.1929>",
                         "RNA_DE_Turner_2010" = "NNDB Turner 2004 dangling-end compilation; Turner D H & Mathews D H (2010, database description) <doi:10.1093/nar/gkp892>",
@@ -1219,12 +1219,44 @@ get_end_table <- function(table_name) {
 # Extra keys beyond the reference are kept, appended after the canonical block.
 # That is the whole point for modified bases: a 5mC set adds stacks rather than
 # replacing them.
+# Parameter sets renamed in 1.1.3 because the old name credited the wrong
+# paper. The values are byte-identical; only the identifier changed. Old names
+# keep working, with a warning, so that scripts and reverse dependencies written
+# against 1.1.2 or earlier do not break. They are deliberately absent from the
+# `choices` vectors, so the documentation and tab-completion show only the
+# current names.
+.TM_RENAMED_TABLES <- c(
+  DNA_NN_Allawi_1998     = "DNA_NN_Allawi_1997",
+  DNA_TMM_Bommarito_2000 = "DNA_TMM_SantaLucia_2001"
+)
+
+.TM_RENAME_WHY <- c(
+  DNA_NN_Allawi_1998     = paste(
+    "the Watson-Crick set is Allawi & SantaLucia (1997) Biochemistry 36:10581,",
+    "Table 1, with SantaLucia (1998) PNAS 95:1460, Table 2; the 1998 paper the",
+    "old name pointed at reports internal C.T mismatches"),
+  DNA_TMM_Bommarito_2000 = paste(
+    "the terminal-mismatch parameters are SantaLucia & Peyret (2001),",
+    "WO 01/94611, Tables 2-3; Bommarito et al. (2000) is the dangling-end",
+    "paper and supplies DNA_DE_Bommarito_2000, which is unchanged")
+)
+
 .resolve_table <- function(x, arg_name, choices) {
   # `is.null(dim(x))` is load-bearing: a character MATRIX satisfies
   # is.character(), so testing the type alone sends a table of the wrong
   # storage mode down the parameter-set-name path, where match.arg() reports
   # "'arg' must be of length 1" and says nothing about the actual problem.
   if (is.character(x) && is.null(dim(x))) {
+    # length 1 matters: an unsupplied argument arrives as the whole default
+    # vector, which must fall through to match.arg() untouched.
+    if (length(x) == 1L && x %in% names(.TM_RENAMED_TABLES)) {
+      new_nm <- .TM_RENAMED_TABLES[[x]]
+      warning("`", arg_name, " = \"", x, "\"` was renamed in 1.1.3 and will be ",
+              "removed in a future release. Use \"", new_nm, "\" instead. ",
+              "The parameters are unchanged, only the name: ",
+              .TM_RENAME_WHY[[x]], ".", call. = FALSE)
+      x <- new_nm
+    }
     nm <- match.arg(x, choices)
     return(list(tbl = get_table(nm), name = nm, user = FALSE))
   }

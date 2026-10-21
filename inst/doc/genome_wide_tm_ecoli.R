@@ -16,6 +16,14 @@ knitr::opts_chunk$set(
   fig.height = 6
 )
 
+# karyoploteR is in Suggests and is needed only for the linear layout of
+# plot_genome_track(). It is not available as a binary on every platform CRAN
+# checks, and plot_genome_track() raises an error rather than returning
+# silently when it is missing, which would fail the vignette build. The linear
+# chunks below are therefore conditional on it; the circular ones are not,
+# since they do not use it.
+has_kp <- requireNamespace("karyoploteR", quietly = TRUE)
+
 ## ----packages-----------------------------------------------------------------
 library(TmCalculator)
 library(BSgenome)
@@ -182,14 +190,20 @@ plot_genome_track(
   label       = label
 )
 
-## ----linear-full, fig.width=10, fig.height=5, fig.cap="Linear genome view of E. coli K-12 MG1655. MutL-AR peaks are drawn inside the chromosome ideogram bar."----
+## ----echo=FALSE, results="asis"-----------------------------------------------
+if (!has_kp) cat("> The linear view below is omitted because the suggested\n> package **karyoploteR** is not installed. Install it with\n> `BiocManager::install(\"karyoploteR\")` to reproduce it.\n\n")
+
+## ----linear-full, eval = has_kp, fig.width=10, fig.height=5, fig.cap="Linear genome view of E. coli K-12 MG1655. MutL-AR peaks are drawn inside the chromosome ideogram bar."----
 plot_genome_track(
   genome_name = genome_name,
   genome_size = chr_length,
   track_list  = tracks
 )
 
-## ----zoom-single, fig.width=10, fig.height=8, fig.cap="Zoomed linear view of the 0.1-0.5 Mb region. Seven tracks share one panel, so `track.gap` separates them and `axis.cex` shrinks the tick labels; without both the y-axis labels of adjacent tracks overlap."----
+## ----echo=FALSE, results="asis"-----------------------------------------------
+if (!has_kp) cat("> Omitted for the same reason: this view is linear and needs\n> **karyoploteR**.\n\n")
+
+## ----zoom-single, eval = has_kp, fig.width=10, fig.height=8, fig.cap="Zoomed linear view of the 0.1-0.5 Mb region. Seven tracks share one panel, so `track.gap` separates them and `axis.cex` shrinks the tick labels; without both the y-axis labels of adjacent tracks overlap."----
 plot_genome_track(
   genome_name = genome_name,
   genome_size = chr_length,

@@ -102,7 +102,15 @@ draw_range <- function(x, lo, hi, col) {
   if (any(v)) graphics::arrows(x[v], lo[v], x[v], hi[v], code = 3, angle = 90,
                                length = 0.03, col = col)
 }
-fmt_n <- function(x) format(x, big.mark = ",", scientific = FALSE, trim = TRUE)
+# A thousands separator is added only from five digits upwards, which is the
+# journal's number style: 1000 is written 1000, 10000 is written 10,000. The
+# previous unconditional big.mark printed the 1000-sequence group as "1,000".
+fmt_n <- function(x) {
+  n <- round(as.numeric(x))
+  ifelse(abs(n) >= 10000L,
+         formatC(n, format = "d", big.mark = ","),
+         formatC(n, format = "d"))
+}
 
 draw <- function() {
   op <- graphics::par(mfrow = c(1, if (add_mem) 3 else 2),

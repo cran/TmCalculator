@@ -335,11 +335,22 @@ zoom_tracks <- function(reg) c(
          data = reg$d[reg$gs[[i]]$rows, c("seqnames", "start", "end")],
          col  = grp_cols[i], alpha = grp_alpha)))
 
+# A thousands separator is added only from five digits upwards, which is the
+# journal's number style: 1000 is written 1000, 10000 is written 10,000. These
+# labels are drawn inside the figure, so they follow that rule; the console
+# diagnostics further down are not part of the figure and are left alone.
+fmt_bp <- function(x) {
+  n <- round(as.numeric(x))
+  ifelse(abs(n) >= 10000L,
+         formatC(n, format = "d", big.mark = ","),
+         formatC(n, format = "d"))
+}
+
 coord_labels <- function(reg) {
   if (!mark_coords) return(NULL)
   p <- do.call(rbind, lapply(reg$gs, function(g) reg$d[g$rows, ]))
   data.frame(seqnames = panelc_label, start = p$start, end = p$start,
-             label = format(p$start, big.mark = ","),
+             label = fmt_bp(p$start),
              stringsAsFactors = FALSE)
 }
 

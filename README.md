@@ -1,5 +1,5 @@
 # TmCalculator <a href="https://github.com/JunhuiLi1017/TmCalculator"><img src="man/figures/logo.png" align="right" height="138" /></a>
-v1.1.2
+v1.1.3
 
 Genome-wide nucleic acid melting temperature (Tm) profiling and multi-omics
 integration. Results are returned as `GRanges` objects, so Tm can be used
@@ -27,14 +27,14 @@ tm_calculate(seqs, method = "tm_nn", nn_table = "DNA_NN_SantaLucia_2004", Na = 5
 
 ## 3. thermodynamic parameter sets
 
-Twenty-seven nearest-neighbor parameter sets are available, in two families.
+Thirty-one nearest-neighbor parameter sets are available, in two families.
 
 **Reference-salt sets** were fitted at a single reference sodium concentration.
 Other conditions are reached through the `salt_method` correction formulas.
 
 | Duplex  | Sets |
 |---------|------|
-| DNA/DNA | `DNA_NN_Breslauer_1986`, `DNA_NN_Sugimoto_1996`, `DNA_NN_Allawi_1998`, `DNA_NN_SantaLucia_2004` (default) |
+| DNA/DNA | `DNA_NN_Breslauer_1986`, `DNA_NN_Sugimoto_1996`, `DNA_NN_Allawi_1997`, `DNA_NN_SantaLucia_2004` (default) |
 | RNA/RNA | `RNA_NN_Freier_1986`, `RNA_NN_Xia_1998`, `RNA_NN_Chen_2012` |
 | RNA/DNA | `RNA_DNA_NN_Sugimoto_1995` |
 
@@ -72,7 +72,7 @@ than correcting a distant one. See `?tm_nn` for the full list and citations.
 
 Three parameter sets have unresolved limitations: an internally inconsistent
 `GG/CG` terminal-mismatch entry in the original patent used for
-`DNA_TMM_Bommarito_2000`, an initiation-term application discrepancy in
+`DNA_TMM_SantaLucia_2001`, an initiation-term application discrepancy in
 `RNA_DNA_NN_Banerjee_2020`, and a Watson–Crick/GU parameter combination issue in
 `RNA_NN_Chen_2012`. These limitations affect calculations using the corresponding
 parameters. See the [parameter reference audit](inst/extdata/tm_nn_reference_audit.md)
@@ -84,6 +84,18 @@ using R function
   `TmCalculatorShiny::TmCalculator_shiny()`
 
 ## 5. citation
+
+To cite the package, please use:
+
+> Li J, Zhu LJ (2026). TmCalculator: An R Package for Genome-Wide Nucleic Acid
+> Melting Temperature Profiling and Multi-Omics Integration. *Applied Sciences*
+> **16**(20), 10400. <doi:10.3390/app162010400>
+
+or in R:
+
+```r
+citation("TmCalculator")
+```
 
 If you use the melting-temperature-optimized parameter sets, please also cite
 the source studies:

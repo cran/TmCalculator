@@ -15,14 +15,14 @@ right = \eqn{\Delta S}). Rownames are dinucleotide step keys such as
 \describe{
   \item{DNA_NN_Breslauer_1986}{DNA/DNA NN, Breslauer et al. (1986)}
   \item{DNA_NN_Sugimoto_1996}{DNA/DNA NN, Sugimoto et al. (1996)}
-  \item{DNA_NN_Allawi_1998}{DNA/DNA Watson-Crick NN, Allawi & SantaLucia (1997), Table 1; legacy identifier}
+  \item{DNA_NN_Allawi_1997}{DNA/DNA Watson-Crick NN, Allawi & SantaLucia (1997), Table 1; legacy identifier}
   \item{DNA_NN_SantaLucia_2004}{DNA/DNA NN, SantaLucia & Hicks (2004)}
   \item{RNA_NN_Freier_1986}{RNA/RNA NN, Freier (1986)}
   \item{RNA_NN_Xia_1998}{RNA/RNA NN, Xia (1998)}
   \item{RNA_NN_Chen_2012}{RNA/RNA NN with GU, Chen / Serra (2012)}
   \item{RNA_DNA_NN_Sugimoto_1995}{RNA/DNA hybrid NN, Sugimoto (1995)}
   \item{DNA_IMM_Peyret_1999}{DNA internal mismatches, six sources (1997-2005); see tm_nn}
-  \item{DNA_TMM_Bommarito_2000}{DNA terminal mismatch, SantaLucia & Peyret (2001), WO2001094611A2, Tables 2-3; legacy identifier}
+  \item{DNA_TMM_SantaLucia_2001}{DNA terminal mismatch, SantaLucia & Peyret (2001), WO2001094611A2, Tables 2-3; legacy identifier}
   \item{DNA_DE_Bommarito_2000}{DNA single dangling end, Bommarito (2000)}
   \item{RNA_DE_Turner_2010}{RNA single dangling end, NNDB Turner 2004 compilation; database described in 2010}
 }

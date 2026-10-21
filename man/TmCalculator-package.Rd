@@ -13,6 +13,8 @@ Accurate calculation of nucleic acid melting temperature (Tm) is fundamental to 
 \seealso{
 Useful links:
 \itemize{
+  \item \url{https://github.com/JunhuiLi1017/TmCalculator}
+  \item \doi{10.3390/app162010400}
   \item Report bugs at \url{https://github.com/JunhuiLi1017/TmCalculator/issues}
 }
 

@@ -7,7 +7,7 @@ Sys.setenv(R_TESTS = "")
   defaults <- list(
     ambiguous = FALSE, shift = 0,
     nn_tbl = TmCalculator:::get_table("DNA_NN_SantaLucia_2004"),
-    tmm_tbl = TmCalculator:::get_table("DNA_TMM_Bommarito_2000"),
+    tmm_tbl = TmCalculator:::get_table("DNA_TMM_SantaLucia_2001"),
     imm_tbl = TmCalculator:::get_table("DNA_IMM_Peyret_1999"),
     de_tbl = TmCalculator:::get_table("DNA_DE_Bommarito_2000"),
     end_tbl = matrix(numeric(0), nrow = 0, ncol = 2),
@@ -73,7 +73,7 @@ test_that("Rcpp core matches R core with shift / dangling ends", {
                      utils::modifyList(
                        list(ambiguous = FALSE, shift = sh,
                             nn_tbl = TmCalculator:::get_table("DNA_NN_SantaLucia_2004"),
-                            tmm_tbl = TmCalculator:::get_table("DNA_TMM_Bommarito_2000"),
+                            tmm_tbl = TmCalculator:::get_table("DNA_TMM_SantaLucia_2001"),
                             imm_tbl = TmCalculator:::get_table("DNA_IMM_Peyret_1999"),
                             de_tbl = TmCalculator:::get_table("DNA_DE_Bommarito_2000"),
                             end_tbl = matrix(numeric(0), nrow = 0, ncol = 2),
@@ -118,7 +118,7 @@ test_that("Rcpp core cleans lowercase/ambiguous characters like the R path", {
          complement = c("YRSW", "TGCATGCA")),
     ambiguous = FALSE, shift = 0,
     nn_tbl = TmCalculator:::get_table("DNA_NN_SantaLucia_2004"),
-    tmm_tbl = TmCalculator:::get_table("DNA_TMM_Bommarito_2000"),
+    tmm_tbl = TmCalculator:::get_table("DNA_TMM_SantaLucia_2001"),
     imm_tbl = TmCalculator:::get_table("DNA_IMM_Peyret_1999"),
     de_tbl = TmCalculator:::get_table("DNA_DE_Bommarito_2000"),
     end_tbl = matrix(numeric(0), nrow = 0, ncol = 2),
@@ -165,7 +165,7 @@ test_that("Zuber 2022 end effects are applied at both duplex ends", {
   nn <- TmCalculator:::get_table("RNA_NN_Zuber_2022")
   args <- list(
     ambiguous = FALSE, shift = 0, nn_tbl = nn,
-    tmm_tbl = TmCalculator:::get_table("DNA_TMM_Bommarito_2000"),
+    tmm_tbl = TmCalculator:::get_table("DNA_TMM_SantaLucia_2001"),
     imm_tbl = TmCalculator:::get_table("DNA_IMM_Peyret_1999"),
     de_tbl = TmCalculator:::get_table("RNA_DE_Turner_2010"),
     dnac_high = 25, dnac_low = 25, self_comp = FALSE,

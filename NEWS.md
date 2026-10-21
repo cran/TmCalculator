@@ -1,3 +1,66 @@
+# TmCalculator 1.1.3
+
+## The paper describing the package is published
+
+* **`citation("TmCalculator")` now returns the article rather than a generated
+  entry.** Li J & Zhu LJ (2026), *Applied Sciences* **16**(20), 10400,
+  <doi:10.3390/app162010400>. The DOI has also been added to `URL` in
+  `DESCRIPTION`, so it appears on the CRAN landing page.
+
+  The parameter sets taken from other studies still carry their own citations;
+  `citation()` says so in its footer, and `?tm_nn` lists the sources per set.
+
+## Two parameter sets renamed, old names still accepted
+
+* **`DNA_NN_Allawi_1998` is now `DNA_NN_Allawi_1997`, and
+  `DNA_TMM_Bommarito_2000` is now `DNA_TMM_SantaLucia_2001`.** The 1.1.2 audit
+  found both names credited the wrong paper. The Watson-Crick set is Allawi &
+  SantaLucia (1997) Biochemistry 36:10581 Table 1, together with SantaLucia
+  (1998) PNAS 95:1460 Table 2; the 1998 paper the old name pointed at reports
+  internal C·T mismatches. The terminal-mismatch set is SantaLucia & Peyret
+  (2001), WO 01/94611, Tables 2–3; Bommarito et al. (2000) is the dangling-end
+  paper, and `DNA_DE_Bommarito_2000`, which does come from it, is unchanged.
+
+  1.1.2 corrected the citations but kept the names, marked as legacy
+  identifiers. On reflection that left the misleading part in the place people
+  actually read, since a parameter-set name is the first thing anyone cites.
+
+  **No values changed.** The tables are byte-identical to 1.1.2, so no melting
+  temperature moves.
+
+  The old spellings still work and resolve to the new sets, with a warning
+  naming the replacement and the reason. They are not listed among the accepted
+  values, so help pages and completion show only the current names. They will
+  be removed in a later release.
+
+  ```r
+  # both give the same answer; the first warns
+  tm_nn(seq, nn_table = "DNA_NN_Allawi_1998")
+  tm_nn(seq, nn_table = "DNA_NN_Allawi_1997")
+  ```
+
+## Vignettes no longer require a suggested package
+
+* **Three vignette chunks called `plot_genome_track()` in its linear layout
+  without checking for `karyoploteR` first.** That package is in `Suggests`,
+  and `plot_genome_track()` raises an error rather than returning quietly when
+  it is missing, so on any platform where `karyoploteR` is unavailable the
+  error propagated out of `knitr` and failed the vignette build. This is what
+  produced the four `re-building of vignette outputs` ERRORs that 1.1.1 and
+  1.1.2 show on the macOS check flavors, where Bioconductor has no binary for
+  it. The Windows and Linux flavors have one, so the vignettes built there and
+  the incoming-submission pretest, which covers only Windows and Debian, never
+  saw it.
+
+  The affected chunks are `linear-full` and `zoom-single` in
+  `genome_wide_tm_ecoli.Rmd` and `sensitivity-zoom` in
+  `window_size_sensitivity.Rmd`. Each is now conditional on
+  `requireNamespace("karyoploteR")`, and prints a short note in place of the
+  figure when it is skipped. The five circular chunks are unchanged, since the
+  circular layout does not use `karyoploteR`.
+
+  No package code changed, and no melting temperature changes.
+
 # TmCalculator 1.1.2
 
 - Audited built-in NN, mismatch and dangling-end citations. Corrected the
@@ -69,7 +132,7 @@ was wrong in both the old and the new form.
   from the other strand the same stack is `"ZW/YX"`, the whole key reversed.
   The published tables store each stack in one orientation only -- of the 87
   keys in `DNA_IMM_Peyret_1999`, 85 have no reversed twin, and neither
-  `DNA_TMM_Bommarito_2000` (48) nor `DNA_DE_Bommarito_2000` (32) has any --
+  `DNA_TMM_SantaLucia_2001` (48) nor `DNA_DE_Bommarito_2000` (32) has any --
   and the lookup was a single hash probe with no retry. A miss contributes
   zero by design, so the omission was silent. Two consequences:
 
@@ -289,7 +352,7 @@ needed no mismatch at all.
   — is now converted first, and anything else is refused by name.
 
   ```r
-  tm_nn("CGTAGCATCCGATCGA", nn_table = "DNA_NN_Allawi_1998")   # now works
+  tm_nn("CGTAGCATCCGATCGA", nn_table = "DNA_NN_Allawi_1997")   # now works
   ```
 
   Pairing a sequence with a complement of your own still needs the explicit

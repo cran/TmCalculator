@@ -9,7 +9,7 @@ Sys.setenv(R_TESTS = "")
 # they are stated twice: once as a frozen value, and once as the property the
 # value follows from.
 #
-# The frozen values all use DNA_NN_Allawi_1998 at dnac_high = 250, dnac_low =
+# The frozen values all use DNA_NN_Allawi_1997 at dnac_high = 250, dnac_low =
 # 0 and salt_method = "none", so that only the stacking sum is compared and
 # nothing downstream can mask a change.
 # ===========================================================================
@@ -20,9 +20,13 @@ flip <- function(s) vapply(strsplit(s, "", fixed = TRUE),
 SEQ  <- "GCATCGTAGGCTAGCT"
 PERF <- chartr("ACGT", "TGCA", SEQ)          # exact complement, 3' to 5'
 
-tm_of <- function(s, cmp, shift = 0, ...) {
+# nn_table is a named argument rather than being fixed inside the call, so
+# that the rename tests further down can ask for a different set. Passing it
+# through `...` while the call also names it makes R complain that the formal
+# argument is matched by two actual arguments.
+tm_of <- function(s, cmp, shift = 0, nn_table = "DNA_NN_Allawi_1997", ...) {
   gr <- TmCalculator::to_genomic_ranges(s, complement_seq = cmp)
-  r  <- TmCalculator::tm_nn(gr, nn_table = "DNA_NN_Allawi_1998", shift = shift,
+  r  <- TmCalculator::tm_nn(gr, nn_table = nn_table, shift = shift,
                             dnac_high = 250, dnac_low = 0,
                             salt_method = "none", ...)
   as.numeric(GenomicRanges::mcols(r$gr)$Tm)
@@ -257,7 +261,7 @@ test_that("the four calls reported in issue #8 agree with each other", {
   f <- function(p, cmp) {
     r <- TmCalculator::tm_nn(
       TmCalculator::to_genomic_ranges(p, complement_seq = cmp),
-      nn_table = "DNA_NN_Allawi_1998", dnac_high = 250, dnac_low = 0,
+      nn_table = "DNA_NN_Allawi_1997", dnac_high = 250, dnac_low = 0,
       salt_method = "none", Na = 1000)
     as.numeric(S4Vectors::mcols(r$gr)$Tm)
   }
@@ -286,7 +290,7 @@ test_that("the four calls reported in issue #8 agree with each other", {
 # ---------------------------------------------------------------------------
 
 TMM_BENT <- local({
-  b <- TmCalculator:::get_table("DNA_TMM_Bommarito_2000")
+  b <- TmCalculator:::get_table("DNA_TMM_SantaLucia_2001")
   b[, 1] <- b[, 1] - 5                           # 5 kcal/mol more stable
   b
 })
@@ -489,7 +493,7 @@ test_that("a single mismatch and a single inosine are unaffected", {
 # ---------------------------------------------------------------------------
 
 test_that("the 5'-T penalty is charged per strand", {
-  tb <- TmCalculator:::get_table("DNA_NN_Allawi_1998")
+  tb <- TmCalculator:::get_table("DNA_NN_Allawi_1997")
   tb["init_5T/A", 1:2] <- c(-3.5, -9.0)
   run <- function(s, cmp) {
     gr <- TmCalculator::to_genomic_ranges(s, complement_seq = cmp)
@@ -616,10 +620,10 @@ test_that("a reverse complement passed as complement_seq is called out", {
 
 test_that("the three methods take a character vector as well as a GRanges", {
   gr <- TmCalculator::to_genomic_ranges(SEQ)
-  expect_equal(TmCalculator::tm_nn(SEQ, nn_table = "DNA_NN_Allawi_1998",
+  expect_equal(TmCalculator::tm_nn(SEQ, nn_table = "DNA_NN_Allawi_1997",
                                    dnac_high = 250, dnac_low = 0,
                                    salt_method = "none")$gr,
-               TmCalculator::tm_nn(gr, nn_table = "DNA_NN_Allawi_1998",
+               TmCalculator::tm_nn(gr, nn_table = "DNA_NN_Allawi_1997",
                                    dnac_high = 250, dnac_low = 0,
                                    salt_method = "none")$gr)
   expect_equal(TmCalculator::tm_gc(SEQ)$gr,  TmCalculator::tm_gc(gr)$gr)
@@ -630,7 +634,7 @@ test_that("the three methods take a character vector as well as a GRanges", {
   # a vector of sequences works too, and the value is the documented one
   expect_equal(as.numeric(GenomicRanges::mcols(
                  TmCalculator::tm_nn(c(SEQ, SEQ),
-                                     nn_table = "DNA_NN_Allawi_1998",
+                                     nn_table = "DNA_NN_Allawi_1997",
                                      dnac_high = 250, dnac_low = 0,
                                      salt_method = "none")$gr)$Tm),
                c(66.5968, 66.5968), tolerance = 1e-4)
@@ -831,9 +835,9 @@ tm_tbl <- function(s, cmp, tbl) {
   as.numeric(GenomicRanges::mcols(r$gr)$Tm)
 }
 
-# DNA_NN_Allawi_1998 is used because both init_A/T and init_G/C are non-zero
+# DNA_NN_Allawi_1997 is used because both init_A/T and init_G/C are non-zero
 # there, so either row moves the answer when it is charged.
-ALW  <- "DNA_NN_Allawi_1998"
+ALW  <- "DNA_NN_Allawi_1997"
 MSEQ <- "AGCGCGCGCA"
 MPRF <- chartr("ACGT", "TGCA", MSEQ)                     # TCGCGCGCGT, A.T ends
 MMM5 <- paste0("C", substring(MPRF, 2L))                 # CCGCGCGCGT, 5' A.C
@@ -893,7 +897,7 @@ test_that("every method salt_correct() implements is reachable from tm_nn()", {
 
 test_that("SantaLucia1998-2 corrects the entropy rather than Tm", {
   tm_of_salt <- function(m) {
-    out <- TmCalculator::tm_nn(SEQ, nn_table = "DNA_NN_Allawi_1998",
+    out <- TmCalculator::tm_nn(SEQ, nn_table = "DNA_NN_Allawi_1997",
                                dnac_high = 250, dnac_low = 0, Na = 50,
                                salt_method = m)
     as.numeric(GenomicRanges::mcols(out$gr)$Tm)
@@ -919,4 +923,58 @@ test_that("the Sugimoto 1995 reference points at the right paper", {
   ref <- out$options[["Thermodynamic NN values"]]
   expect_match(ref, "10.1021/bi00035a029", fixed = TRUE)
   expect_false(grepl("S0048-9697", ref, fixed = TRUE))
+})
+
+# ---------------------------------------------------------------------------
+# 18. Two parameter sets were renamed in 1.1.3, and the old names still work.
+#
+#     `DNA_NN_Allawi_1998` credited a paper on internal C.T mismatches, and
+#     `DNA_TMM_Bommarito_2000` credited the dangling-end paper. The values were
+#     never in question; only the identifiers were wrong. Renaming them breaks
+#     any script that names them, so the old spellings are kept as deprecated
+#     aliases. These tests pin both halves: the alias resolves to the same
+#     table, and it warns while doing so.
+# ---------------------------------------------------------------------------
+
+test_that("the renamed sets carry exactly the values the old names did", {
+  expect_equal(TmCalculator:::get_table("DNA_NN_Allawi_1997"),
+               TmCalculator:::.TM_CONSTANTS[["DNA_NN_Allawi_1997"]])
+  expect_equal(TmCalculator:::get_table("DNA_TMM_SantaLucia_2001"),
+               TmCalculator:::.TM_CONSTANTS[["DNA_TMM_SantaLucia_2001"]])
+  # the identifiers that disappeared must not still be sitting in the data
+  expect_false("DNA_NN_Allawi_1998" %in% names(TmCalculator:::.TM_CONSTANTS))
+  expect_false("DNA_TMM_Bommarito_2000" %in% names(TmCalculator:::.TM_CONSTANTS))
+  # the dangling-end set keeps its name, since that one was always correct
+  expect_true("DNA_DE_Bommarito_2000" %in% names(TmCalculator:::.TM_CONSTANTS))
+})
+
+test_that("an old parameter set name still works and says so", {
+  new <- suppressWarnings(
+    tm_of("GCATCGTAGGCTAGCT", PERF, nn_table = "DNA_NN_Allawi_1997"))
+  old <- suppressWarnings(
+    tm_of("GCATCGTAGGCTAGCT", PERF, nn_table = "DNA_NN_Allawi_1998"))
+  expect_equal(old, new)
+  expect_warning(tm_of("GCATCGTAGGCTAGCT", PERF,
+                       nn_table = "DNA_NN_Allawi_1998"),
+                 "DNA_NN_Allawi_1997")
+})
+
+test_that("the renamed terminal-mismatch set behaves the same way", {
+  gr <- TmCalculator::to_genomic_ranges(SEQ, complement_seq = PERF)
+  get <- function(tmm) {
+    r <- suppressWarnings(
+      TmCalculator::tm_nn(gr, nn_table = "DNA_NN_SantaLucia_2004",
+                          tmm_table = tmm, dnac_high = 250, dnac_low = 0,
+                          salt_method = "none"))
+    as.numeric(GenomicRanges::mcols(r$gr)$Tm)
+  }
+  expect_equal(get("DNA_TMM_Bommarito_2000"), get("DNA_TMM_SantaLucia_2001"))
+  expect_warning(
+    TmCalculator::tm_nn(gr, tmm_table = "DNA_TMM_Bommarito_2000",
+                        salt_method = "none"),
+    "DNA_TMM_SantaLucia_2001")
+})
+
+test_that("a name that was never valid is still rejected rather than warned about", {
+  expect_error(tm_of("GCATCGTAGGCTAGCT", PERF, nn_table = "DNA_NN_Nonesuch_1999"))
 })

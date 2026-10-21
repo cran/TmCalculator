@@ -124,7 +124,7 @@
   ), ncol=2, byrow=TRUE, dimnames=list(nn_row_std, nn_col)))
   
   # Legacy identifier: Allawi & SantaLucia (1997), Table 1, doi:10.1021/bi962590c.
-  DNA_NN_Allawi_1998 <- .complete_nn_rc(matrix(c(
+  DNA_NN_Allawi_1997 <- .complete_nn_rc(matrix(c(
     0,0,  2.3,4.1,  0.1,-2.8,  0,0,  0,0,  0,0,  0,-1.4,
     -7.9,-22.2,  -7.2,-20.4,  -7.2,-21.3,  -8.5,-22.7,  -8.4,-22.4,
     -7.8,-21.0,  -8.2,-22.2,  -10.6,-27.2,  -9.8,-24.4,  -8.0,-19.9
@@ -237,7 +237,7 @@
   # Legacy identifier: SantaLucia & Peyret (2001), WO2001094611A2, Tables 2-3.
   # GG/CG (-0.7, -19.2) matches the patent but conflicts with its printed dG37.
   # See inst/extdata/tm_nn_reference_audit.md; no inferred correction applied.
-  DNA_TMM_Bommarito_2000 <- matrix(c(
+  DNA_TMM_SantaLucia_2001 <- matrix(c(
     -3.1,-7.8,  -2.5,-6.3,  -4.3,-10.7,  -8.0,-22.5,  -0.1,0.5,
     -0.7,-1.3,  -2.1,-5.1,  -3.9,-10.6,  -1.1,-2.1,   -1.1,-2.7,
     -3.8,-9.5,  -0.7,-19.2, -2.4,-6.5,   -3.2,-8.9,   -6.1,-16.9,
@@ -672,14 +672,14 @@
   list(
     DNA_NN_Breslauer_1986    = DNA_NN_Breslauer_1986,
     DNA_NN_Sugimoto_1996     = DNA_NN_Sugimoto_1996,
-    DNA_NN_Allawi_1998       = DNA_NN_Allawi_1998,
+    DNA_NN_Allawi_1997       = DNA_NN_Allawi_1997,
     DNA_NN_SantaLucia_2004   = DNA_NN_SantaLucia_2004,
     RNA_NN_Freier_1986       = RNA_NN_Freier_1986,
     RNA_NN_Xia_1998          = RNA_NN_Xia_1998,
     RNA_NN_Chen_2012         = RNA_NN_Chen_2012,
     RNA_DNA_NN_Sugimoto_1995 = RNA_DNA_NN_Sugimoto_1995,
     DNA_IMM_Peyret_1999      = DNA_IMM_Peyret_1999,
-    DNA_TMM_Bommarito_2000   = DNA_TMM_Bommarito_2000,
+    DNA_TMM_SantaLucia_2001   = DNA_TMM_SantaLucia_2001,
     DNA_DE_Bommarito_2000    = DNA_DE_Bommarito_2000,
     RNA_DE_Turner_2010       = RNA_DE_Turner_2010,
     GC_VARTAB                = GC_VARTAB,
@@ -720,7 +720,7 @@
   expected_rc_pairs <- c("TT/AA","TG/AC","TC/AG","AG/TC","AC/TG","CC/GG")
   
   standard_tables <- c("DNA_NN_Breslauer_1986","DNA_NN_Sugimoto_1996",
-                       "DNA_NN_Allawi_1998","DNA_NN_SantaLucia_2004",
+                       "DNA_NN_Allawi_1997","DNA_NN_SantaLucia_2004",
                        "RNA_NN_Freier_1986","RNA_NN_Xia_1998",
                        "RNA_NN_Chen_2012","RNA_DNA_NN_Sugimoto_1995",
                        "DNA_NN_Weber_2015","DNA_NN_Weber_OW04_69",
@@ -779,7 +779,7 @@
 # Expected verification output:
 #   DNA_NN_Breslauer_1986    rows=23  OK
 #   DNA_NN_Sugimoto_1996     rows=23  OK
-#   DNA_NN_Allawi_1998       rows=23  OK
+#   DNA_NN_Allawi_1997       rows=23  OK
 #   DNA_NN_SantaLucia_2004   rows=23  OK
 #   RNA_NN_Freier_1986       rows=23  OK
 #   RNA_NN_Xia_1998          rows=23  OK

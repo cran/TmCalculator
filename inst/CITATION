@@ -1,0 +1,23 @@
+citHeader("To cite TmCalculator in publications, please use:")
+
+bibentry(
+  bibtype = "Article",
+  title   = paste("{TmCalculator}: An {R} Package for Genome-Wide Nucleic Acid",
+                  "Melting Temperature Profiling and Multi-Omics Integration"),
+  author  = c(person(given = "Junhui", family = "Li"),
+              person(given = "Lihua Julie", family = "Zhu")),
+  journal = "Applied Sciences",
+  year    = "2026",
+  volume  = "16",
+  number  = "20",
+  pages   = "10400",
+  doi     = "10.3390/app162010400",
+  url     = "https://www.mdpi.com/2076-3417/16/20/10400"
+)
+
+citFooter(
+  paste("The melting-temperature-optimized parameter sets (the Weber,",
+        "Ferreira, Basilio Barbosa and Banerjee families) come from separate",
+        "studies. If you use one of them, please cite its source as well;",
+        "the sources are listed in ?tm_nn and in the package README.")
+)

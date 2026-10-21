@@ -160,6 +160,15 @@ draw_range <- function(x, lo, hi, col) {
                      angle = 90, length = 0.03, col = col, lwd = 1)
 }
 
+# A thousands separator is added only from five digits upwards, which is the
+# journal's number style: 1000 is written 1000, 10000 is written 10,000.
+fmt_n <- function(x) {
+  n <- round(as.numeric(x))
+  ifelse(abs(n) >= 10000L,
+         formatC(n, format = "d", big.mark = ","),
+         formatC(n, format = "d"))
+}
+
 open_dev(file.path(outdir, "crosstool"), 9, 4.2)
 op <- graphics::par(mfrow = c(1, 2), mar = c(4.3, 4.4, 2.2, 0.8),
                     las = 1, cex = 0.85)
@@ -183,8 +192,7 @@ aggt   <- agg[agg$tool %in% tt, ]
 plot(NA, xlim = c(0, max(aggt$n)), ylim = c(0, max(aggt$compute_hi) * 1.05),
      bty = "n", xlab = "Sequences", ylab = "Compute time (s)", xaxt = "n")
 graphics::axis(1, at = pretty(c(0, max(aggt$n))),
-               labels = format(pretty(c(0, max(aggt$n))), big.mark = ",",
-                               scientific = FALSE, trim = TRUE))
+               labels = fmt_n(pretty(c(0, max(aggt$n)))))
 graphics::mtext("A", side = 3, adj = 0, font = 2, line = 0.8, cex = 1.1)
 for (t in tt) {
   d <- aggt[aggt$tool == t, ]
@@ -281,7 +289,7 @@ draw_bars <- function(ylim, xlabels) {
     u <- graphics::par("usr")
     graphics::text(bp, u[3] - 0.02 * (u[4] - u[3]), labels = wall$tool,
                    srt = 40, adj = 1, xpd = TRUE, cex = 0.72)
-    graphics::mtext(format(unique(wall$n), big.mark = ","), side = 1,
+    graphics::mtext(fmt_n(unique(wall$n)), side = 1,
                     line = 3.6, at = tapply(bp, grp, mean), cex = 0.85)
     graphics::mtext("Sequences", side = 1, line = 4.7, cex = 0.85)
   }

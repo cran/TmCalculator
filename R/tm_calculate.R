@@ -44,7 +44,7 @@
 #'   \item \code{nn_table}:
 #'     \itemize{
 #'       \item DNA/DNA: "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996",
-#'         "DNA_NN_Allawi_1998", "DNA_NN_SantaLucia_2004" (default)
+#'         "DNA_NN_Allawi_1997", "DNA_NN_SantaLucia_2004" (default)
 #'       \item DNA/DNA, molecular crowding: "DNA_NN_Ghosh_2020_PEG200"
 #'         (40 wt% PEG200, 100 mM NaCl)
 #'       \item DNA/DNA, salt-optimized: "DNA_NN_Weber_2015" (1020 mM),
@@ -63,7 +63,7 @@
 #'     }
 #'   \item \code{tmm_table} (Terminal Mismatches):
 #'     \itemize{
-#'       \item "DNA_TMM_Bommarito_2000" (default)
+#'       \item "DNA_TMM_SantaLucia_2001" (default)
 #'     }
 #'   \item \code{imm_table} (Internal Mismatches):
 #'     \itemize{
@@ -223,7 +223,7 @@
 #'   \code{salt_method} is applied. \code{attr(x, "end_table")} supplies a
 #'   companion penultimate-pair end-effect table.
 #' @param tmm_table Thermodynamic parameters for terminal mismatches. Only applicable for the NN method.
-#'   Default: "DNA_TMM_Bommarito_2000"
+#'   Default: "DNA_TMM_SantaLucia_2001"
 #' 
 #' @param imm_table Thermodynamic parameters for internal mismatches. Only applicable for the NN method.
 #'   Default: "DNA_IMM_Peyret_1999"
@@ -436,7 +436,7 @@ tm_calculate <- function(input_seq,
                                     "DNA_NN_Ghosh_2020_PEG200",
                                     "DNA_NN_Breslauer_1986",
                                     "DNA_NN_Sugimoto_1996",
-                                    "DNA_NN_Allawi_1998",
+                                    "DNA_NN_Allawi_1997",
                                     "RNA_NN_Freier_1986",
                                     "RNA_NN_Xia_1998",
                                     "RNA_NN_Chen_2012",
@@ -463,7 +463,7 @@ tm_calculate <- function(input_seq,
                                     "RNA_DNA_NN_Weber_2019_VH",
                                     "RNA_DNA_NN_Weber_2019_LS",
                                     "RNA_DNA_NN_Banerjee_2020"),
-                        tmm_table = "DNA_TMM_Bommarito_2000",
+                        tmm_table = "DNA_TMM_SantaLucia_2001",
                         imm_table = "DNA_IMM_Peyret_1999",
                         de_table = c("DNA_DE_Bommarito_2000",
                                     "RNA_DE_Turner_2010"),

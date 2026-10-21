@@ -23,14 +23,14 @@
 #' \describe{
 #'   \item{DNA_NN_Breslauer_1986}{DNA/DNA NN, Breslauer et al. (1986)}
 #'   \item{DNA_NN_Sugimoto_1996}{DNA/DNA NN, Sugimoto et al. (1996)}
-#'   \item{DNA_NN_Allawi_1998}{DNA/DNA Watson-Crick NN, Allawi & SantaLucia (1997), Table 1; legacy identifier}
+#'   \item{DNA_NN_Allawi_1997}{DNA/DNA Watson-Crick NN, Allawi & SantaLucia (1997), Table 1; legacy identifier}
 #'   \item{DNA_NN_SantaLucia_2004}{DNA/DNA NN, SantaLucia & Hicks (2004)}
 #'   \item{RNA_NN_Freier_1986}{RNA/RNA NN, Freier (1986)}
 #'   \item{RNA_NN_Xia_1998}{RNA/RNA NN, Xia (1998)}
 #'   \item{RNA_NN_Chen_2012}{RNA/RNA NN with GU, Chen / Serra (2012)}
 #'   \item{RNA_DNA_NN_Sugimoto_1995}{RNA/DNA hybrid NN, Sugimoto (1995)}
 #'   \item{DNA_IMM_Peyret_1999}{DNA internal mismatches, six sources (1997-2005); see tm_nn}
-#'   \item{DNA_TMM_Bommarito_2000}{DNA terminal mismatch, SantaLucia & Peyret (2001), WO2001094611A2, Tables 2-3; legacy identifier}
+#'   \item{DNA_TMM_SantaLucia_2001}{DNA terminal mismatch, SantaLucia & Peyret (2001), WO2001094611A2, Tables 2-3; legacy identifier}
 #'   \item{DNA_DE_Bommarito_2000}{DNA single dangling end, Bommarito (2000)}
 #'   \item{RNA_DE_Turner_2010}{RNA single dangling end, NNDB Turner 2004 compilation; database described in 2010}
 #' }
@@ -153,10 +153,10 @@ DNA_NN_Sugimoto_1996 <- matrix(c(0.6,-9,0,0,0,0,0,0,0,0,0,0,0,-1.4,-8,-21.9,-5.6
 rownames(DNA_NN_Sugimoto_1996) <- rownames(DNA_NN_Breslauer_1986)
 colnames(DNA_NN_Sugimoto_1996) <- c("left","right")
 
-DNA_NN_Allawi_1998 <- matrix(c(0,0,2.3,4.1,0.1,-2.8,0,0,0,0,0,0,0,-1.4,-7.9,-22.2,-7.2,-20.4,-7.2,-21.3,-8.5,
+DNA_NN_Allawi_1997 <- matrix(c(0,0,2.3,4.1,0.1,-2.8,0,0,0,0,0,0,0,-1.4,-7.9,-22.2,-7.2,-20.4,-7.2,-21.3,-8.5,
                       -22.7,-8.4,-22.4,-7.8,-21,-8.2,-22.2,-10.6,-27.2,-9.8,-24.4,-8,-19.9),ncol=2,byrow = TRUE)
-rownames(DNA_NN_Allawi_1998) <- rownames(DNA_NN_Breslauer_1986)
-colnames(DNA_NN_Allawi_1998) <- c("left","right")
+rownames(DNA_NN_Allawi_1997) <- rownames(DNA_NN_Breslauer_1986)
+colnames(DNA_NN_Allawi_1997) <- c("left","right")
 
 DNA_NN_SantaLucia_2004 <- matrix(c(0.2,-5.7,2.2,6.9,0,0,0,0,0,0,0,0,0,-1.4,-7.6,-21.3,-7.2,-20.4,-7.2,-20.4,-8.5,
                       -22.7,-8.4,-22.4,-7.8,-21,-8.2,-22.2,-10.6,-27.2,-9.8,-24.4,-8,-19),ncol=2,byrow = TRUE)
@@ -226,18 +226,18 @@ colnames(DNA_IMM_Peyret_1999) <- c("left","right")
 # SantaLucia & Peyret (2001), Patent Application WO 01/94611, Tables 2-3.
 # NOT Bommarito et al. (2000), which is the dangling-end paper below; the
 # object name is a legacy identifier. See inst/extdata/tm_nn_reference_audit.md.
-DNA_TMM_Bommarito_2000 <- matrix(c(-3.1,-7.8,-2.5,-6.3,-4.3,-10.7,-8,-22.5,-0.1,0.5,-0.7,-1.3,-2.1,-5.1,-3.9,-10.6,-1.1,
+DNA_TMM_SantaLucia_2001 <- matrix(c(-3.1,-7.8,-2.5,-6.3,-4.3,-10.7,-8,-22.5,-0.1,0.5,-0.7,-1.3,-2.1,-5.1,-3.9,-10.6,-1.1,
                        -2.1,-1.1,-2.7,-3.8,-9.5,-0.7,-19.2,-2.4,-6.5,-3.2,-8.9,-6.1,-16.9,-7.4,-21.2,-1.6,-4,
                        -1.8,-3.8,-2.6,-5.9,-2.7,-6,-5,-13.8,-3.2,-7.1,-2.3,-5.9,-2.7,-7,-0.9,-1.7,-2.3,-6.3,
                        -3.2,-8,-3.9,-10.6,-4.9,-13.5,-3,-7.8,-2.5,-6.3,-0.7,-1.2,-1.9,-4.4,-2.5,-5.9,-3.9,
                        -9.6,-6,-15.5,-4.3,-11.1,-4.6,-11.4,-2,-4.7,-2.4,-5.8,-3.2,-8.7,-3.5,-9.4,-3.8,-9,-6.6,
                        -18.7,-5.7,-15.9,-5.9,-16.1,-3.9,-10.5,-3.6,-9.8),ncol=2,byrow = TRUE)
-rownames(DNA_TMM_Bommarito_2000) <- c("AA/TA","TA/AA","CA/GA","GA/CA","AC/TC","TC/AC","CC/GC","GC/CC","AG/TG","TG/AG",
+rownames(DNA_TMM_SantaLucia_2001) <- c("AA/TA","TA/AA","CA/GA","GA/CA","AC/TC","TC/AC","CC/GC","GC/CC","AG/TG","TG/AG",
                           "CG/GG","GG/CG","AT/TT","TT/AT","CT/GT","GT/CT","AA/TC","AC/TA","CA/GC","CC/GA",
                           "GA/CC","GC/CA","TA/AC","TC/AA","AC/TT","AT/TC","CC/GT","CT/GC","GC/CT","GT/CC",
                           "TC/AT","TT/AC","AA/TG","AG/TA","CA/GG","CG/GA","GA/CG","GG/CA","TA/AG","TG/AA",
                           "AG/TT","AT/TG","CG/GT","CT/GG","GG/CT","GT/CG","TG/AT","TT/AG")
-colnames(DNA_TMM_Bommarito_2000) <- c("left","right")
+colnames(DNA_TMM_SantaLucia_2001) <- c("left","right")
 
 # ---- Dangling End Parameters (DNA, Bommarito 2000) --------------------------
 DNA_DE_Bommarito_2000 <- matrix(c(0.2,2.3,-6.3,-17.1,-3.7,-10,-2.9,-7.6,0.6,3.3,-4.4,-12.6,-4,-11.9,-4.1,-13,-1.1,-1.6,
@@ -300,14 +300,14 @@ thermodynamic_nn_params <- list(
   # ---- Populated -----------------------------------------------------------
   DNA_NN_Breslauer_1986     = DNA_NN_Breslauer_1986,
   DNA_NN_Sugimoto_1996      = DNA_NN_Sugimoto_1996,
-  DNA_NN_Allawi_1998        = DNA_NN_Allawi_1998,
+  DNA_NN_Allawi_1997        = DNA_NN_Allawi_1997,
   DNA_NN_SantaLucia_2004    = DNA_NN_SantaLucia_2004,
   RNA_NN_Freier_1986        = RNA_NN_Freier_1986,
   RNA_NN_Xia_1998           = RNA_NN_Xia_1998,
   RNA_NN_Chen_2012          = RNA_NN_Chen_2012,
   RNA_DNA_NN_Sugimoto_1995  = RNA_DNA_NN_Sugimoto_1995,
   DNA_IMM_Peyret_1999       = DNA_IMM_Peyret_1999,
-  DNA_TMM_Bommarito_2000    = DNA_TMM_Bommarito_2000,
+  DNA_TMM_SantaLucia_2001    = DNA_TMM_SantaLucia_2001,
   DNA_DE_Bommarito_2000     = DNA_DE_Bommarito_2000,
   RNA_DE_Turner_2010        = RNA_DE_Turner_2010,
 

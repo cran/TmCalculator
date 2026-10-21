@@ -12,7 +12,7 @@ tm_calculate(
   ambiguous = FALSE,
   shift = 0,
   nn_table = c("DNA_NN_SantaLucia_2004", "DNA_NN_Ghosh_2020_PEG200",
-    "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996", "DNA_NN_Allawi_1998",
+    "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996", "DNA_NN_Allawi_1997",
     "RNA_NN_Freier_1986", "RNA_NN_Xia_1998", "RNA_NN_Chen_2012", "RNA_NN_Zuber_2022",
     "RNA_NN_Ghosh_2023_PEG200", "RNA_DNA_NN_Sugimoto_1995", "DNA_NN_Weber_2015",
     "DNA_NN_Weber_OW04_69", "DNA_NN_Weber_OW04_119", "DNA_NN_Weber_OW04_220",
@@ -23,7 +23,7 @@ tm_calculate(
     "RNA_NN_Weber_FIF_221", "RNA_NN_Weber_FIF_621", "RNA_NN_Weber_FIF_1021",
     "RNA_DNA_NN_Weber_2019_FT", "RNA_DNA_NN_Weber_2019_VH", "RNA_DNA_NN_Weber_2019_LS",
     "RNA_DNA_NN_Banerjee_2020"),
-  tmm_table = "DNA_TMM_Bommarito_2000",
+  tmm_table = "DNA_TMM_SantaLucia_2001",
   imm_table = "DNA_IMM_Peyret_1999",
   de_table = c("DNA_DE_Bommarito_2000", "RNA_DE_Turner_2010"),
   dnac_high = 25,
@@ -141,7 +141,7 @@ Only applicable for the NN method. Default: 0}
   companion penultimate-pair end-effect table.}
 
 \item{tmm_table}{Thermodynamic parameters for terminal mismatches. Only applicable for the NN method.
-Default: "DNA_TMM_Bommarito_2000"}
+Default: "DNA_TMM_SantaLucia_2001"}
 
 \item{imm_table}{Thermodynamic parameters for internal mismatches. Only applicable for the NN method.
 Default: "DNA_IMM_Peyret_1999"}
@@ -353,7 +353,7 @@ details.
   \item \code{nn_table}:
     \itemize{
       \item DNA/DNA: "DNA_NN_Breslauer_1986", "DNA_NN_Sugimoto_1996",
-        "DNA_NN_Allawi_1998", "DNA_NN_SantaLucia_2004" (default)
+        "DNA_NN_Allawi_1997", "DNA_NN_SantaLucia_2004" (default)
       \item DNA/DNA, molecular crowding: "DNA_NN_Ghosh_2020_PEG200"
         (40 wt% PEG200, 100 mM NaCl)
       \item DNA/DNA, salt-optimized: "DNA_NN_Weber_2015" (1020 mM),
@@ -372,7 +372,7 @@ details.
     }
   \item \code{tmm_table} (Terminal Mismatches):
     \itemize{
-      \item "DNA_TMM_Bommarito_2000" (default)
+      \item "DNA_TMM_SantaLucia_2001" (default)
     }
   \item \code{imm_table} (Internal Mismatches):
     \itemize{
